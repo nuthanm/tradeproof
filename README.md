@@ -6,7 +6,10 @@ Not investment advice. Free public market feeds can be delayed or incomplete.
 
 ## Live site
 
-Deployed on Vercel from this repo (FastAPI + static UI in `public/`).
+- **Production:** https://tradeproof-two.vercel.app
+- **GitHub:** https://github.com/nuthanm/tradeproof
+
+Deployed on Vercel (FastAPI + static UI in `public/`).
 
 ## Run locally
 
