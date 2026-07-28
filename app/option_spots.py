@@ -488,7 +488,7 @@ def forecast_methodology(symbol: str, row: dict[str, Any], rating: dict[str, Any
         "datasets": [
             {
                 "name": "NSE / BSE session prices (Yahoo .NS / .BO)",
-                "use": "OHLCV history for momentum, averages, volume z-score, breakout structure, and 7D band.",
+                "use": "OHLCV history for 50/200 EMA, support/resistance, volume z-score, breakout structure, and 7D band.",
             },
             {
                 "name": "FII / DII cash nets (public daily flow feed)",
@@ -508,18 +508,20 @@ def forecast_methodology(symbol: str, row: dict[str, Any], rating: dict[str, Any
             },
         ],
         "approach": [
-            "Detect breakout state from 20D/55D highs, SMA20/50 alignment, and volume z-score.",
-            "Score short-term bias from 5D/20D momentum, volume intensity, breakout state, and FII net.",
-            "Map score → Up/Down with probability capped in a conservative band (about 52–85%).",
+            "Compute 50 EMA and 200 EMA; map price vs support/resistance (20D/55D swings) into confirmed / forming / range-bound.",
+            "Derive Up/Down Prob % from EMA stack, distance to S/R, breakout state, 5D/20D momentum, volume z-score, and FII net (about 45–92%).",
+            "Publish a separate 50/200 EMA score (1–10): 1 = weak chance the Prob % holds, 10 ≈ near sure-shot conviction (~99% model confidence).",
             "Build expected min/max from realized volatility × √7 with directional skew.",
-            "Publish drivers (momentum, distance to averages, volume, flows, deals) instead of repeating breakout labels.",
+            "Explain drivers with EMA levels, S/R, volume, flows, and deals — not black-box labels.",
             f"3Y rating for {symbol}: {rating.get('method', 'return / drawdown / volatility blend')}.",
         ],
         "currentOutput": {
             "direction": row.get("forecast7d", {}).get("direction"),
             "probability": row.get("forecast7d", {}).get("probability"),
+            "emaScore": row.get("forecast7d", {}).get("emaScore"),
             "band": f"₹{row.get('forecast7d', {}).get('min')} – ₹{row.get('forecast7d', {}).get('max')}",
             "breakout": row.get("breakout"),
+            "probMethod": row.get("forecast7d", {}).get("probMethod"),
         },
         "limits": [
             "Free public data can be delayed or missing (especially option chains and BSE depth).",

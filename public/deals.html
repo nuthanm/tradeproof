@@ -67,8 +67,8 @@
       if (type !== "all") deals = deals.filter((d) => d.type === type);
       if (side !== "all") deals = deals.filter((d) => d.side === side);
 
-      const buyVal = deals.filter((d) => d.side === "Buy").reduce((a, d) => a + d.value, 0);
-      const sellVal = deals.filter((d) => d.side === "Sell").reduce((a, d) => a + d.value, 0);
+      const buyVal = deals.filter((d) => d.side === "Buy").reduce((a, d) => a + Number(d.value || 0), 0);
+      const sellVal = deals.filter((d) => d.side === "Sell").reduce((a, d) => a + Number(d.value || 0), 0);
 
       document.getElementById("dealStats").innerHTML = `
         <article class="panel"><div class="panel-title">Prints shown</div><div class="stat-value">${deals.length}</div></article>
@@ -87,8 +87,8 @@
             </div>
             <div class="deal-meta">
               <span>${d.time} IST</span>
-              <span>Qty ${d.qty}</span>
-              <span>₹${d.value.toFixed(1)} Cr</span>
+              <span>Qty ${(d.qty != null && d.qty !== "") ? d.qty : "—"}</span>
+              <span>₹${Number(d.value || 0).toFixed(1)} Cr</span>
               <span>${d.client}</span>
             </div>
             <p style="margin-top:0.45rem;font-size:0.88rem;color:var(--text-muted)">${d.note}</p>
@@ -105,6 +105,8 @@
         document.getElementById(id).addEventListener("change", render);
       });
       TPUI.whenReady(render);
+      document.addEventListener("tp:deals", render);
+      document.addEventListener("tp:ready", render);
     });
   </script>
 </body>

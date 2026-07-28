@@ -180,8 +180,12 @@
         sessLine.innerHTML = stale + (nifty.label || sess.label || "Awaiting live quote…");
       }
       const series = nifty.series || [];
-      if (series.length >= 2 && chartEl) {
+      const datesKey = JSON.stringify(nifty.seriesDates || []);
+      const seriesKey = JSON.stringify(series) + datesKey;
+      if (series.length >= 2 && chartEl && chartEl.dataset.seriesKey !== seriesKey) {
+        chartEl.dataset.seriesKey = seriesKey;
         chartEl.innerHTML = TPUI.sparkline(series, { id: "heroNifty", w: 560, h: 180, dates: nifty.seriesDates || [] });
+        if (TPUI.bindSparklines) TPUI.bindSparklines(chartEl);
       }
     }
     document.addEventListener("tp:pulse", paintHero);

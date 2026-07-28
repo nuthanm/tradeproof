@@ -280,6 +280,93 @@ def fetch_fii_dii() -> dict[str, Any]:
     return cache.get_or_set("fii_dii", 900, _load)
 
 
+def _deal_num(val: Any) -> float:
+    """Parse qty/price that may arrive as int, float, or comma-formatted string."""
+    if val is None or val == "":
+        return 0.0
+    try:
+        if isinstance(val, (int, float)):
+            return float(val) if np.isfinite(float(val)) else 0.0
+        s = str(val).strip().replace(",", "").replace("₹", "").replace("Rs", "").replace(" ", "")
+        if not s or s.lower() in {"nan", "none", "-"}:
+            return 0.0
+        return float(s)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _row_pick(row: Any, *keys: str) -> Any:
+    """Case-insensitive / substring column lookup for NSE / nselib frames."""
+    if hasattr(row, "get"):
+        for k in keys:
+            if k in row and row.get(k) not in (None, ""):
+                return row.get(k)
+        # pandas Series / dict with odd column names
+        try:
+            mapping = {str(c).strip().lower(): c for c in (row.index if hasattr(row, "index") else row.keys())}
+        except Exception:  # noqa: BLE001
+            mapping = {}
+        for k in keys:
+            lk = k.lower()
+            if lk in mapping:
+                v = row[mapping[lk]] if hasattr(row, "__getitem__") else row.get(mapping[lk])
+                if v not in (None, ""):
+                    return v
+        for k in keys:
+            lk = k.lower().replace(" ", "").replace("_", "").replace("/", "")
+            for mk, orig in mapping.items():
+                compact = mk.replace(" ", "").replace("_", "").replace("/", "")
+                if lk and (lk == compact or lk in compact or compact in lk):
+                    v = row[orig] if hasattr(row, "__getitem__") else row.get(orig)
+                    if v not in (None, ""):
+                        return v
+    return None
+
+
+def _normalize_deal_side(raw: Any) -> str:
+    s = str(raw or "").strip().upper()
+    if s.startswith("S") or "SELL" in s:
+        return "Sell"
+    if s.startswith("B") or "BUY" in s:
+        return "Buy"
+    return "Buy" if "buy" in s.lower() else ("Sell" if "sell" in s.lower() else "Buy")
+
+
+def _pack_deal(
+    *,
+    time: str,
+    kind: str,
+    symbol: str,
+    side: str,
+    qty: Any,
+    price: Any,
+    value: Any = None,
+    client: str = "Institutional",
+    note: str = "",
+) -> dict[str, Any] | None:
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        return None
+    qty_n = _deal_num(qty)
+    price_n = _deal_num(price)
+    value_n = _deal_num(value)
+    if value_n <= 0 and qty_n > 0 and price_n > 0:
+        value_n = (qty_n * price_n) / 1e7  # ₹ Cr
+    qty_disp = f"{int(qty_n):,}" if qty_n >= 1 else (str(qty) if qty not in (None, "") else "0")
+    return {
+        "time": (time or "")[:16],
+        "type": kind.title() if kind else "Block",
+        "symbol": symbol,
+        "side": _normalize_deal_side(side),
+        "qty": qty_disp,
+        "qtyRaw": qty_n,
+        "price": round(price_n, 2) if price_n else 0.0,
+        "value": round(value_n, 2),
+        "client": str(client or "Institutional")[:80],
+        "note": note or f"{kind} deal",
+    }
+
+
 def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
     def _nselib_deals() -> list[dict[str, Any]]:
         deals: list[dict[str, Any]] = []
@@ -298,35 +385,45 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
                     continue
                 if not isinstance(df, pd.DataFrame):
                     continue
-                for _, row in df.head(80).iterrows():
-                    symbol = str(row.get("Symbol") or row.get("symbol") or row.get("SECURITY") or "").strip()
-                    if not symbol:
-                        continue
-                    qty = row.get("Quantity") or row.get("Traded Quantity") or row.get("qty") or 0
-                    price = row.get("Trade Price") or row.get("Price") or row.get("WAP") or 0
-                    try:
-                        value_cr = (float(qty) * float(price)) / 1e7
-                    except Exception:  # noqa: BLE001
-                        value_cr = 0.0
-                    side = str(row.get("Buy / Sell") or row.get("Client Type") or row.get("dealType") or "").title()
-                    if "Sell" in side:
-                        side = "Sell"
-                    elif "Buy" in side:
-                        side = "Buy"
-                    else:
-                        side = "Buy" if "buy" in side.lower() else "Sell"
-                    deals.append(
-                        {
-                            "time": str(row.get("Date") or row.get("Trade Date") or "")[:16],
-                            "type": kind,
-                            "symbol": symbol.upper(),
-                            "side": side,
-                            "qty": str(qty),
-                            "value": round(value_cr, 2),
-                            "client": str(row.get("Client Name") or row.get("clientName") or "Institutional")[:80],
-                            "note": f"{kind} deal from NSE report",
-                        }
+                for _, row in df.head(120).iterrows():
+                    symbol = _row_pick(row, "Symbol", "symbol", "SECURITY", "BD_SYMBOL", "Script Name", "Security Name")
+                    qty = _row_pick(
+                        row,
+                        "Quantity",
+                        "Traded Quantity",
+                        "qty",
+                        "Qty",
+                        "BD_QTY_TRADES",
+                        "Quantity Traded",
+                        "No.of shares",
+                        "No of shares",
                     )
+                    price = _row_pick(
+                        row,
+                        "Trade Price",
+                        "Price",
+                        "WAP",
+                        "Avg Price",
+                        "Average Price",
+                        "BD_AVG_PRICE",
+                        "Traded Price",
+                        "Trade price / Wght. Avg. Price",
+                    )
+                    side = _row_pick(row, "Buy / Sell", "Buy/Sell", "dealType", "BD_BUY_SELL", "Client Type", "side")
+                    when = _row_pick(row, "Date", "Trade Date", "BD_DT_TRADE", "Deal Date", "time")
+                    client = _row_pick(row, "Client Name", "clientName", "BD_CLIENT_NAME", "Client")
+                    packed = _pack_deal(
+                        time=str(when or ""),
+                        kind=kind,
+                        symbol=str(symbol or ""),
+                        side=str(side or ""),
+                        qty=qty,
+                        price=price,
+                        client=str(client or "Institutional"),
+                        note=f"{kind} deal from NSE report",
+                    )
+                    if packed:
+                        deals.append(packed)
         except Exception as exc:  # noqa: BLE001
             log.warning("nselib deals failed: %s", exc)
 
@@ -334,25 +431,53 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
             r = SESSION.get("https://fii-diidata.mrchartist.com/api/large-deals", timeout=20)
             if r.ok:
                 payload = r.json()
-                items = payload if isinstance(payload, list) else payload.get("deals") or payload.get("data") or []
-                for item in items[:40]:
-                    deals.append(
-                        {
-                            "time": str(item.get("time") or item.get("date") or "")[:16],
-                            "type": str(item.get("type") or "Block").title(),
-                            "symbol": str(item.get("symbol") or item.get("Symbol") or "").upper(),
-                            "side": str(item.get("side") or item.get("buySell") or "Buy").title(),
-                            "qty": str(item.get("qty") or item.get("quantity") or ""),
-                            "value": float(item.get("value") or item.get("valueCr") or 0),
-                            "client": str(item.get("client") or "Institutional")[:80],
-                            "note": str(item.get("note") or "Large deal feed"),
-                        }
+                items: list[dict[str, Any]] = []
+                as_on = ""
+                if isinstance(payload, list):
+                    items = [x for x in payload if isinstance(x, dict)]
+                elif isinstance(payload, dict):
+                    as_on = str(payload.get("as_on") or payload.get("date") or "")
+                    # API shape: { as_on, bulk: [...], block: [...], short: [...] }
+                    for kind_key, kind_label in (("block", "Block"), ("bulk", "Bulk")):
+                        for item in payload.get(kind_key) or []:
+                            if isinstance(item, dict):
+                                items.append({**item, "_kind": kind_label})
+                    # legacy keys
+                    for item in payload.get("deals") or payload.get("data") or []:
+                        if isinstance(item, dict):
+                            items.append(item)
+                for item in items[:200]:
+                    qty = item.get("qty") or item.get("quantity") or item.get("Qty")
+                    price = item.get("price") or item.get("Price") or item.get("avgPrice")
+                    value = item.get("value") or item.get("valueCr") or item.get("value_cr")
+                    packed = _pack_deal(
+                        time=str(item.get("time") or item.get("date") or as_on or "")[:16],
+                        kind=str(item.get("_kind") or item.get("type") or "Block"),
+                        symbol=str(item.get("symbol") or item.get("Symbol") or ""),
+                        side=str(item.get("side") or item.get("buySell") or item.get("Buy/Sell") or "Buy"),
+                        qty=qty,
+                        price=price,
+                        value=value,
+                        client=str(item.get("client") or item.get("name") or "Institutional"),
+                        note=str(item.get("note") or "Large deal feed (Mr. Chartist)"),
                     )
+                    if packed and (packed["qtyRaw"] > 0 or packed["value"] > 0):
+                        deals.append(packed)
         except Exception as exc:  # noqa: BLE001
             log.warning("large-deals feed failed: %s", exc)
-        return deals
 
-    return cache.get_or_set(f"deals:{period}", 900, _nselib_deals)
+        # Deduplicate identical prints
+        seen: set[tuple] = set()
+        uniq: list[dict[str, Any]] = []
+        for d in deals:
+            key = (d.get("symbol"), d.get("side"), d.get("qty"), d.get("value"), d.get("time"), d.get("type"))
+            if key in seen:
+                continue
+            seen.add(key)
+            uniq.append(d)
+        return uniq
+
+    return cache.get_or_set(f"deals:{period}:v2", 300, _nselib_deals)
 
 
 def fetch_option_volume_proxy(symbol: str = "NIFTY") -> dict[str, Any]:

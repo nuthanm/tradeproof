@@ -33,7 +33,7 @@
     <div class="page-header">
       <div class="eyebrow">Nifty 50 · India Top 100</div>
       <h1>Breakout & 7-day forecasts</h1>
-      <p>Real trend / breakout scan for equities, with next-7-day direction and probability % from volume, deals, and institutional flow.</p>
+      <p>Trend / breakout scan using 50 &amp; 200 EMA plus support/resistance. Prob % is the directional chance; EMA score (1–10) is conviction behind that Prob %.</p>
       <div id="liveBanner" class="meta-bar" style="margin-top:0.75rem;margin-bottom:0">Connecting…</div>
     </div>
 
@@ -67,6 +67,7 @@
             <th>Breakout</th>
             <th>7D forecast</th>
             <th>Prob %</th>
+            <th>50/200 EMA score</th>
             <th>Expected range</th>
             <th>Call / Put · NSE|BSE</th>
             <th>3Y rating</th>
@@ -127,7 +128,14 @@
           </td>
           <td>${TP.helpers.breakoutBadge(s.breakout)}<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;max-width:160px;white-space:normal">${s.breakoutNote || ""}</div></td>
           <td>${TP.helpers.dirBadge(f.direction)}</td>
-          <td><span class="prob"><em>${f.probability}%</em></span></td>
+          <td class="prob-cell">
+            <span class="prob"><em>${f.probability}%</em></span>
+            <small title="${(f.probMethod || "").replace(/"/g, "&quot;")}">${(f.probMethod || "From 50/200 EMA + S/R + volume + FII").slice(0, 90)}${(f.probMethod || "").length > 90 ? "…" : ""}</small>
+          </td>
+          <td class="ema-score-cell" title="${((f.emaScoreDetail && f.emaScoreDetail.rationale) || "").replace(/"/g, "&quot;")}">
+            <strong>${f.emaScore != null ? f.emaScore : "—"}</strong><span style="color:var(--text-muted)"> / 10</span>
+            <small>${(f.emaScoreDetail && f.emaScoreDetail.rationale) ? f.emaScoreDetail.rationale.slice(0, 110) + (f.emaScoreDetail.rationale.length > 110 ? "…" : "") : "1 = weak conviction · 10 ≈ near sure-shot"}</small>
+          </td>
           <td class="range-cell">
             ₹${TP.helpers.fmtNum(f.min)} – ₹${TP.helpers.fmtNum(f.max)}
             <small>Min → Max · 7D</small>
@@ -146,7 +154,7 @@
           <td><span class="rating-pill">${Number(s.rating3y).toFixed(1)} / 10</span></td>
         </tr>
       `;
-      }).join("") || `<tr><td colspan="8" style="color:var(--text-muted)">No matches</td></tr>`;
+      }).join("") || `<tr><td colspan="9" style="color:var(--text-muted)">No matches</td></tr>`;
     }
 
     document.addEventListener("DOMContentLoaded", () => {

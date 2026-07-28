@@ -40,6 +40,7 @@
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       TPUI.whenReady(async () => {
+      TPLoader && TPLoader.show("Loading stock detail…");
       const params = new URLSearchParams(location.search);
       const symbol = (params.get("symbol") || "RELIANCE").toUpperCase();
 
@@ -59,6 +60,9 @@
           TP.live = true;
         }
       } catch (e) { /* keep bundle fallback */ }
+      finally {
+        TPLoader && TPLoader.hide();
+      }
 
       if (stock.optionVolume == null && TP.helpers.enrichStock) TP.helpers.enrichStock(stock);
       const f7 = stock.forecast7d;
@@ -106,6 +110,7 @@
             <div class="panel-title">7-day forecast</div>
             <div style="margin-bottom:0.35rem">${TP.helpers.dirBadge(f7.direction)}</div>
             <div class="prob"><em>${f7.probability}%</em> <span style="font-size:0.8rem;color:var(--text-muted);font-weight:500">probability</span></div>
+            <div class="stat-label" style="margin-top:0.45rem">EMA score <strong>${f7.emaScore != null ? f7.emaScore : "—"}</strong>/10</div>
           </article>
           <article class="panel">
             <div class="panel-title">7D band</div>
@@ -208,6 +213,7 @@
 
         <section class="panel" style="margin-top:1rem">
           <div class="panel-title">Sudden rise / fall — history reasons</div>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.85rem">Matched against dated company headlines, deal prints, and known global risk windows when available — not a generic driver list.</p>
           <div class="event-list">
             ${(detail.events || []).map((e) => `
               <article class="event-item">
@@ -216,7 +222,10 @@
                   <div class="event-move ${e.type}">${e.move}</div>
                   ${(e.prior5d != null || e.next3d != null) ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem">Prior 5D ${e.prior5d >= 0 ? "+" : ""}${e.prior5d}% · Next 3D ${e.next3d >= 0 ? "+" : ""}${e.next3d}%</div>` : ""}
                 </div>
-                <div>${e.reason}</div>
+                <div>
+                  <div>${e.reason}</div>
+                  ${(e.causes && e.causes.length) ? `<ul class="event-causes">${e.causes.map((c) => `<li>${c}</li>`).join("")}</ul>` : ""}
+                </div>
               </article>
             `).join("") || `<p style="color:var(--text-muted)">No large session moves flagged in the available history window.</p>`}
           </div>
@@ -278,6 +287,7 @@
       };
       document.addEventListener("tp:quotes", applyLiveEquity);
       applyLiveEquity();
+      if (TPUI.bindSparklines) TPUI.bindSparklines(document.getElementById("detailRoot"));
       });
     });
   </script>

@@ -334,7 +334,7 @@ def _merge_series(daily, live_value: float | None, live_bar: date | None) -> tup
 
     dates_raw = list(daily.index[-15:])
 
-    dates = [d.strftime("%d %b") if hasattr(d, "strftime") else str(d)[:10] for d in dates_raw]
+    dates = [d.strftime("%d %b %Y") if hasattr(d, "strftime") else str(d)[:10] for d in dates_raw]
 
     if live_value is None or not series:
 
@@ -348,7 +348,7 @@ def _merge_series(daily, live_value: float | None, live_bar: date | None) -> tup
 
         series.append(round(live_value, 2))
 
-        dates.append(live_bar.strftime("%d %b"))
+        dates.append(live_bar.strftime("%d %b %Y"))
 
     elif live_bar and yahoo_bar and live_bar == yahoo_bar:
 
@@ -358,7 +358,7 @@ def _merge_series(daily, live_value: float | None, live_bar: date | None) -> tup
 
         series.append(round(live_value, 2))
 
-        dates.append(live_bar.strftime("%d %b"))
+        dates.append(live_bar.strftime("%d %b %Y"))
 
     return series, dates
 
@@ -472,7 +472,7 @@ def _quote_payload(
 
                 "series": [overlay["value"]],
 
-                "seriesDates": [bar_day.strftime("%d %b")],
+                "seriesDates": [bar_day.strftime("%d %b %Y")],
 
             }
 
