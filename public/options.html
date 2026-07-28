@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nifty 50 Options — TradeProof</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark"></span>TradeProof</a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="signals.html">Equity breakouts →</a>
+    </div>
+  </header>
+
+  <main class="page container" id="root">
+    <p style="color:var(--text-muted)">Loading…</p>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      TPUI.whenReady(async () => {
+      let o = TP.optionsReversal;
+      try {
+        const res = await fetch("/api/options/nifty", { cache: "no-store" });
+        if (res.ok) o = await res.json();
+      } catch (e) { /* keep cached */ }
+      if (!o) return;
+
+      const impactIcon = { bull: "up", bear: "down", neutral: "" };
+      const ov = o.optionVolumeNse || o.optionVolume || { call: 1, put: 1, label: "NSE Call / Put volume" };
+      const ovB = o.optionVolumeBse || { call: 1, put: 1, label: "BSE Call / Put (proxy)" };
+      const exch = o.exchange || "NSE";
+      const cm = o.chainMeta || {};
+      const weekly = o.weeklySpots || { spots: [], active: false };
+      const hero = o.heroZero || { active: false, spots: [] };
+      const disclaimer = o.disclaimer || (TP.meta && TP.meta.disclaimer) || "";
+
+      const spotCards = (weekly.spots || []).map((s) => `
+        <article class="spot-card">
+          <div class="spot-card-head">
+            <strong>#${s.rank} · ${s.instrument}</strong>
+            <span class="badge ${s.side === "CE" ? "badge-bull" : "badge-bear"}">${s.side}</span>
+          </div>
+          <div class="spot-grid">
+            <div><span class="stat-label">Ideal entry (LTP)</span><strong>₹${TP.helpers.fmtNum(s.entry)}</strong></div>
+            <div><span class="stat-label">Strict stop-loss</span><strong class="down">₹${TP.helpers.fmtNum(s.stopLoss)}</strong></div>
+            <div><span class="stat-label">Target 1</span><strong class="up">₹${TP.helpers.fmtNum(s.target1)}</strong></div>
+            <div><span class="stat-label">Target 2</span><strong class="up">₹${TP.helpers.fmtNum(s.target2)}</strong></div>
+          </div>
+          <div class="spot-meta">Expiry ${s.expiry || "—"} · R:R ${s.riskReward || "—"} · Index invalidation ${s.indexInvalidation != null ? s.indexInvalidation.toLocaleString("en-IN") : "—"} · OI ${Number(s.oi||0).toLocaleString("en-IN")} · Vol ${Number(s.volume||0).toLocaleString("en-IN")}</div>
+          <p class="spot-why">${s.why}</p>
+        </article>
+      `).join("") || `<p style="color:var(--text-muted)">No liquid spots ranked for this expiry yet (chain thin or unavailable).</p>`;
+
+      const heroBlock = hero.active ? `
+        <section class="panel hero-zero-panel" style="margin-top:1rem">
+          <div class="panel-title">Hero Zero · expiry day only</div>
+          <p style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.75rem">${hero.warning || ""}</p>
+          <p style="font-size:0.85rem;margin-bottom:1rem">${hero.method || ""}</p>
+          ${(hero.spots || []).map((s) => `
+            <article class="spot-card spot-card-hero">
+              <div class="spot-card-head">
+                <strong>#${s.rank} · ${s.instrument}</strong>
+                <span class="badge badge-warn">Hero Zero</span>
+              </div>
+              <div class="spot-grid">
+                <div><span class="stat-label">Ideal entry</span><strong>₹${TP.helpers.fmtNum(s.idealEntry)}</strong></div>
+                <div><span class="stat-label">Strict stop-loss</span><strong class="down">₹${TP.helpers.fmtNum(s.stopLoss)}</strong></div>
+                <div><span class="stat-label">Target 1 (2×)</span><strong class="up">₹${TP.helpers.fmtNum(s.target1)}</strong></div>
+                <div><span class="stat-label">Target 2 (3×)</span><strong class="up">₹${TP.helpers.fmtNum(s.target2)}</strong></div>
+              </div>
+              <div class="spot-meta">${s.entryNote || ""} · OI ${Number(s.oi||0).toLocaleString("en-IN")} · Vol ${Number(s.volume||0).toLocaleString("en-IN")}</div>
+              <p class="spot-why">${s.why}</p>
+            </article>
+          `).join("") || `<p style="color:var(--text-muted)">No Hero Zero candidates cleared the liquidity/premium filters.</p>`}
+        </section>
+      ` : `
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">Hero Zero</div>
+          <p style="color:var(--text-muted)">${hero.reason || "Locked until weekly expiry day."}</p>
+        </section>
+      `;
+
+      document.getElementById("root").innerHTML = `
+        <div class="page-header">
+          <div class="eyebrow">NSE Nifty · current weekly expiry</div>
+          <h1>Nifty 50 options desk</h1>
+          <p>Weekly-expiry spots from live option-chain OI, volume, PCR, max pain, and breakout/trend bias — with strict premium stops and targets.</p>
+        </div>
+
+        <div class="edu-banner">${disclaimer}</div>
+
+        <div class="grid-4" style="margin-bottom:1rem">
+          <article class="panel">
+            <div class="panel-title">Nifty spot · ${exch}</div>
+            <div class="stat-value" style="font-size:1.5rem">${TP.helpers.fmtNum(o.spot)}</div>
+            <div class="stat-label">${o.index} · ${exch}</div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">Weekly expiry</div>
+            <div class="stat-value" style="font-size:1.35rem">${cm.expiry || weekly.expiry || "—"}</div>
+            <div class="stat-label">${cm.isExpiryDay ? "Expiry day · Hero Zero unlocked" : "Current expiry week"}</div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">Signal</div>
+            <div class="stat-value" style="font-size:1.2rem;line-height:1.25">${o.signal}</div>
+            <div style="margin-top:0.5rem">${TP.helpers.dirBadge(o.direction)} ${o.breakout ? TP.helpers.breakoutBadge(o.breakout) : ""}</div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">Model probability</div>
+            <div class="stat-value" style="font-size:1.8rem">${o.probability}%</div>
+            <div class="stat-label">${o.horizon || ""}</div>
+          </article>
+        </div>
+
+        <div class="grid-4" style="margin-bottom:1rem">
+          <article class="panel"><div class="panel-title">ATM</div><div class="stat-value" style="font-size:1.3rem">${o.levels?.atm != null ? Number(o.levels.atm).toLocaleString("en-IN") : "—"}</div></article>
+          <article class="panel"><div class="panel-title">Max pain</div><div class="stat-value" style="font-size:1.3rem">${o.levels?.maxPain != null ? Number(o.levels.maxPain).toLocaleString("en-IN") : "—"}</div></article>
+          <article class="panel"><div class="panel-title">PCR OI</div><div class="stat-value" style="font-size:1.3rem">${cm.pcrOi ?? "—"}</div></article>
+          <article class="panel"><div class="panel-title">VIX / FII</div><div class="stat-value" style="font-size:1.05rem;line-height:1.35">${(o.factors||[]).find(f=>f.name==="India VIX")?.value || "—"} · FII ₹${o.flows?.fii?.net ?? "—"} Cr</div></article>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:1rem">
+          <section class="panel">
+            ${TP.helpers.volumeSpeedBar(ov.call, ov.put, { title: ov.label })}
+          </section>
+          <section class="panel">
+            ${TP.helpers.volumeSpeedBar(ovB.call, ovB.put, { title: ovB.label })}
+            <p style="margin-top:0.65rem;font-size:0.8rem;color:var(--text-muted)">BSE Sensex option depth is limited on free feeds — shown as a labeled volume proxy.</p>
+          </section>
+        </div>
+
+        <section class="panel" style="margin-bottom:1rem">
+          <div class="panel-title">Weekly expiry spots · strict SL &amp; targets</div>
+          <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:0.5rem">${weekly.biasNote || ""}</p>
+          <p style="font-size:0.85rem;margin-bottom:1rem">${weekly.method || ""}</p>
+          <div class="spot-list">${spotCards}</div>
+        </section>
+
+        ${heroBlock}
+
+        <div class="grid-2" style="margin-bottom:1rem;margin-top:1rem">
+          <section class="panel">
+            <div class="panel-title">Setup narrative</div>
+            <p style="font-size:1.05rem;margin-bottom:0.75rem">${o.setup || ""}</p>
+            <div class="level-chips">
+              ${(o.levels?.support || []).map((l) => `<span class="chip">Support ${Number(l).toLocaleString("en-IN")}</span>`).join("")}
+              ${(o.levels?.resistance || []).map((l) => `<span class="chip">Resistance ${Number(l).toLocaleString("en-IN")}</span>`).join("")}
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-title">Scenario probabilities</div>
+            ${(o.scenarios || []).map((s) => `
+              <div class="breakdown-row">
+                <div>
+                  <strong>${s.label}</strong> · ${TP.helpers.dirBadge(s.bias)} · <strong>${s.prob}%</strong>
+                  <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.25rem">${s.path}</div>
+                  <div style="font-size:0.85rem;margin-top:0.2rem">${s.action}</div>
+                </div>
+              </div>
+            `).join("")}
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">Why this reversal read</div>
+          <div class="breakdown">
+            ${(o.factors || []).map((f) => `
+              <div class="breakdown-row">
+                <div>
+                  <span class="factor-name">${f.name}</span>
+                  <div style="font-size:0.8rem;color:var(--text-muted)">${f.note || ""}</div>
+                </div>
+                <span class="factor-val ${impactIcon[f.impact] || ""}">${f.value}</span>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      `;
+      });
+    });
+  </script>
+</body>
+</html>

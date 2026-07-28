@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Penny Stocks — TradeProof</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark"></span>TradeProof</a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="signals.html">Blue-chip breakouts →</a>
+    </div>
+  </header>
+
+  <main class="page container">
+    <div class="page-header">
+      <div class="eyebrow">Price &lt; ₹25 · high risk</div>
+      <h1>Penny stock desk</h1>
+      <p>Fundamentals score (1–10), risk–reward, and tactical suggestion for a 6–12 month horizon. Speculative — size small.</p>
+    </div>
+
+    <div class="toolbar">
+      <select id="suggestFilter">
+        <option value="all">All suggestions</option>
+        <option value="Buy">Buy (tactical)</option>
+        <option value="Watch">Watch</option>
+        <option value="Avoid">Avoid</option>
+      </select>
+      <span id="count" style="margin-left:auto;color:var(--text-muted);font-size:0.85rem"></span>
+    </div>
+
+    <div class="deal-list" id="pennyList"></div>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    function render() {
+      const filter = document.getElementById("suggestFilter").value;
+      let rows = TP.pennies.filter((p) => p.include !== false && p.price < 25);
+      if (filter === "Buy") rows = rows.filter((p) => p.suggestion.startsWith("Buy"));
+      else if (filter !== "all") rows = rows.filter((p) => p.suggestion === filter);
+      rows.sort((a, b) => b.rating - a.rating);
+
+      document.getElementById("count").textContent = `${rows.length} names · below ₹25`;
+      document.getElementById("pennyList").innerHTML = rows.map((p) => `
+        <article class="panel" style="padding:1.25rem">
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.75rem;align-items:flex-start">
+            <div>
+              <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+                <strong style="font-size:1.15rem">${p.symbol}</strong>
+                ${TP.helpers.suggestBadge(p.suggestion)}
+                <span class="rating-pill">Rating ${p.rating.toFixed(1)} / 10</span>
+              </div>
+              <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.25rem">${p.name} · ${p.sector} · ₹${TP.helpers.fmtNum(p.price)}</div>
+            </div>
+            <div style="text-align:right">
+              <div class="stat-label">Risk : Reward</div>
+              <div class="stat-value" style="font-size:1.4rem">${p.riskReward}</div>
+              <div class="stat-label">${p.horizon}</div>
+            </div>
+          </div>
+
+          <div class="kpi-grid" style="margin:1rem 0">
+            <div class="kpi-card"><div class="stat-label">P/E</div><strong>${p.pe ?? "n/a"}</strong><small>Loss-making if blank</small></div>
+            <div class="kpi-card"><div class="stat-label">P/B</div><strong>${p.pb}</strong><small>Book value check</small></div>
+            <div class="kpi-card"><div class="stat-label">ROE %</div><strong>${p.roe}</strong><small>Profitability</small></div>
+            <div class="kpi-card"><div class="stat-label">D/E</div><strong>${p.debtEquity ?? "n/a"}</strong><small>Leverage</small></div>
+            <div class="kpi-card"><div class="stat-label">Promoter %</div><strong>${p.promotor}</strong><small>Skin in the game</small></div>
+            <div class="kpi-card"><div class="stat-label">Sales growth 3Y %</div><strong>${p.salesGrowth3y}</strong><small>Top-line trend</small></div>
+          </div>
+
+          <p style="margin-bottom:0.5rem">${p.thesis}</p>
+          <div class="grid-2">
+            <div style="font-size:0.88rem"><strong class="down">Risks</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.risks}</div></div>
+            <div style="font-size:0.88rem"><strong class="up">Reward path</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.reward}</div></div>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("suggestFilter").addEventListener("change", render);
+      TPUI.whenReady(render);
+    });
+  </script>
+</body>
+</html>

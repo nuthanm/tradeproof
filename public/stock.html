@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stock Detail — TradeProof</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark"></span>TradeProof</a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="signals.html">All breakouts →</a>
+    </div>
+  </header>
+
+  <main class="page container" id="detailRoot">
+    <p style="color:var(--text-muted)">Loading…</p>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      TPUI.whenReady(async () => {
+      const params = new URLSearchParams(location.search);
+      const symbol = (params.get("symbol") || "RELIANCE").toUpperCase();
+
+      let stock = TP.stocks.find((s) => s.symbol === symbol) || TP.stocks[0];
+      let detail = (TP.detail && TP.detail[stock.symbol]) || (TP.defaultDetail && TP.defaultDetail(stock)) || { thesis: "", factors: [], kpis: [], events: [], series: stock.series || [], news: [] };
+      let deals = (TP.deals || []).filter((d) => d.symbol === stock.symbol);
+      let payloadDisclaimer = (TP.meta && TP.meta.disclaimer) || "";
+
+      try {
+        const res = await fetch(`/api/stock/${symbol}`, { cache: "no-store" });
+        if (res.ok) {
+          const payload = await res.json();
+          stock = payload.stock;
+          detail = payload.detail;
+          deals = payload.deals || [];
+          payloadDisclaimer = payload.disclaimer || payloadDisclaimer;
+          TP.live = true;
+        }
+      } catch (e) { /* keep bundle fallback */ }
+
+      if (stock.optionVolume == null && TP.helpers.enrichStock) TP.helpers.enrichStock(stock);
+      const f7 = stock.forecast7d;
+      const ovNse = stock.optionVolumeNse || stock.optionVolume || { call: 1, put: 1, label: "NSE Call / Put", available: true };
+      const ovBse = stock.optionVolumeBse;
+      const bseOptOk = ovBse && ovBse.available !== false && ((ovBse.call || 0) + (ovBse.put || 0) > 0);
+      const nsePx = stock.priceNse ?? stock.price;
+      const bsePx = stock.priceBse;
+      const nseChg = stock.changeNse ?? stock.change;
+      const bseChg = stock.changeBse;
+      const rating = detail.rating3yDetail || stock.rating3yDetail || {};
+      const news = detail.news || [];
+      const seriesDates = detail.seriesDates || stock.seriesDates || [];
+      const bo = detail.breakoutStatus || { state: stock.breakout, note: stock.breakoutNote };
+
+      document.title = `${stock.symbol} — TradeProof`;
+
+      document.getElementById("detailRoot").innerHTML = `
+        <div class="page-header">
+          <div class="eyebrow"><a href="signals.html" style="color:var(--brand)">← Breakouts</a> · ${(stock.universe || stock.index || []).join(" · ")}</div>
+          <h1 style="display:flex;flex-wrap:wrap;align-items:center;gap:0.75rem">
+            ${stock.symbol}
+            ${TP.helpers.breakoutBadge(stock.breakout)}
+            ${TP.helpers.badge(stock.trend)}
+          </h1>
+          <p>${stock.name} · dual exchange quotes · ${bo.note || stock.breakoutNote || ""}</p>
+        </div>
+
+        <div class="edu-banner">${payloadDisclaimer}</div>
+
+        <div class="grid-4" style="margin-bottom:1rem">
+          <article class="panel">
+            <div class="panel-title">NSE · <span id="nseMode">quote</span></div>
+            <div class="stat-value" style="font-size:1.5rem" id="nsePrice">₹${TP.helpers.fmtNum(nsePx)}</div>
+            <div class="stat-delta ${(nseChg ?? 0) >= 0 ? "up" : "down"}" id="nseChg">${TP.helpers.fmtPct(nseChg ?? 0)} · NSE</div>
+            <div class="stat-label" id="nseLabel">Updates while market is open; freezes at session close</div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">BSE · <span id="bseMode">quote</span></div>
+            <div class="stat-value" style="font-size:1.5rem" id="bsePrice">${bsePx != null ? "₹" + TP.helpers.fmtNum(bsePx) : "n/a"}</div>
+            <div class="stat-delta ${(bseChg ?? 0) >= 0 ? "up" : "down"}" id="bseChg">${bsePx != null ? TP.helpers.fmtPct(bseChg ?? 0) + " · BSE" : "BSE quote unavailable"}</div>
+            <div class="stat-label" id="bseLabel"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">7-day forecast</div>
+            <div style="margin-bottom:0.35rem">${TP.helpers.dirBadge(f7.direction)}</div>
+            <div class="prob"><em>${f7.probability}%</em> <span style="font-size:0.8rem;color:var(--text-muted);font-weight:500">probability</span></div>
+          </article>
+          <article class="panel">
+            <div class="panel-title">7D band</div>
+            <div class="stat-value" style="font-size:1.15rem;line-height:1.35">₹${TP.helpers.fmtNum(f7.min)} – ₹${TP.helpers.fmtNum(f7.max)}</div>
+            <div class="stat-label">Target ≈ ₹${TP.helpers.fmtNum(f7.target)}</div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-bottom:1rem">
+          <section class="panel">
+            ${TP.helpers.volumeSpeedBar(ovNse.call, ovNse.put, { title: ovNse.label || "NSE Call / Put volume" })}
+          </section>
+          <section class="panel">
+            ${bseOptOk
+              ? TP.helpers.volumeSpeedBar(ovBse.call, ovBse.put, { title: ovBse.label || "BSE Call / Put proxy" })
+              : `<div class="panel-title">BSE Call / Put</div><p style="color:var(--text-muted);font-size:0.9rem">BSE equity option chain is not available on free feeds for this name. Cash BSE LTP is shown above when the BSE quote resolves.</p>`}
+            <p style="margin-top:0.65rem;font-size:0.8rem;color:var(--text-muted)">BSE Call/Put uses BSE cash volume &amp; session return — it is not a copy of NSE percentages. Not a live BSE F&amp;O chain.</p>
+          </section>
+        </div>
+
+        <div class="detail-hero">
+          <section class="panel">
+            <div class="panel-title">Price path · last ${ (detail.series || stock.series || []).length || 15 } sessions (NSE)</div>
+            <div class="chart-box">${TPUI.sparkline(detail.series || stock.series || [], { id: stock.symbol, w: 640, h: 280, dates: seriesDates })}</div>
+          </section>
+          <section class="panel">
+            <div class="panel-title">Why this 7-day forecast</div>
+            <p style="font-size:0.95rem;margin-bottom:0.75rem">${detail.thesis || ""}</p>
+            <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem">Breakout status is shown above (${bo.state || stock.breakout}). Drivers below explain the probability — not a repeat of the same labels.</p>
+            <div class="breakdown">
+              ${(detail.factors || []).map((f) => `
+                <div class="breakdown-row">
+                  <div>
+                    <span class="factor-name">${f.name}</span>
+                    ${f.note ? `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.2rem">${f.note}</div>` : ""}
+                  </div>
+                  <span class="factor-val ${f.impact === "bull" ? "up" : f.impact === "bear" ? "down" : ""}">${f.value}</span>
+                </div>
+              `).join("")}
+            </div>
+          </section>
+        </div>
+
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">How this forecast is derived</div>
+          ${detail.methodology ? `
+            <p style="font-size:0.9rem;margin-bottom:0.75rem">${detail.methodology.purpose || ""}</p>
+            <div class="eyebrow" style="margin-bottom:0.5rem">Datasets used</div>
+            <div class="breakdown" style="margin-bottom:1rem">
+              ${(detail.methodology.datasets || []).map((d) => `
+                <div class="breakdown-row">
+                  <div>
+                    <span class="factor-name">${d.name}</span>
+                    <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.2rem">${d.use}</div>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+            <div class="eyebrow" style="margin-bottom:0.5rem">Approach</div>
+            <ol class="method-list">
+              ${(detail.methodology.approach || []).map((a) => `<li>${a}</li>`).join("")}
+            </ol>
+            <div class="eyebrow" style="margin:1rem 0 0.5rem">Model limits</div>
+            <ul class="method-list">
+              ${(detail.methodology.limits || []).map((a) => `<li>${a}</li>`).join("")}
+            </ul>
+          ` : `<p style="color:var(--text-muted)">Methodology loads with the live stock API.</p>`}
+        </section>
+
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">Key KPIs · 3Y rating method</div>
+          <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:0.85rem">
+            ${rating.method || "3Y rating = 45% total return + 35% max-drawdown resilience + 20% annualized volatility (lower vol scores higher)."}
+            ${rating.totalReturnPct != null ? ` Latest inputs: return ${rating.totalReturnPct}% · max DD ${rating.maxDrawdownPct}% · vol ${rating.volatilityPct}%.` : ""}
+          </p>
+          <div class="kpi-grid">
+            ${(detail.kpis || []).map((k) => `
+              <div class="kpi-card">
+                <div class="stat-label">${k.name}</div>
+                <strong>${k.value}</strong>
+                <small>${k.note}</small>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">Business news</div>
+          ${news.length ? `
+            <div class="news-list">
+              ${news.map((n) => `
+                <article class="news-item">
+                  <div class="news-meta">${n.publisher || "News"}${n.published ? " · " + n.published : ""}</div>
+                  ${n.link ? `<a href="${n.link}" target="_blank" rel="noopener noreferrer">${n.title}</a>` : `<div>${n.title}</div>`}
+                </article>
+              `).join("")}
+            </div>
+          ` : `<p style="color:var(--text-muted)">No recent company headlines from the news feed right now.</p>`}
+        </section>
+
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">Sudden rise / fall — history reasons</div>
+          <div class="event-list">
+            ${(detail.events || []).map((e) => `
+              <article class="event-item">
+                <div>
+                  <div style="font-size:0.8rem;color:var(--text-muted)">${e.date}</div>
+                  <div class="event-move ${e.type}">${e.move}</div>
+                  ${(e.prior5d != null || e.next3d != null) ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem">Prior 5D ${e.prior5d >= 0 ? "+" : ""}${e.prior5d}% · Next 3D ${e.next3d >= 0 ? "+" : ""}${e.next3d}%</div>` : ""}
+                </div>
+                <div>${e.reason}</div>
+              </article>
+            `).join("") || `<p style="color:var(--text-muted)">No large session moves flagged in the available history window.</p>`}
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:1rem">
+          <div class="panel-title">Related deals today</div>
+          ${deals.length ? `
+            <div class="deal-list">
+              ${deals.map((d) => `
+                <article class="deal-item" style="background:transparent;box-shadow:none">
+                  <div>
+                    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                      <span class="badge badge-neutral">${d.type}</span>
+                      ${TP.helpers.sideBadge(d.side)}
+                      <strong>₹${Number(d.value).toFixed(1)} Cr</strong>
+                    </div>
+                    <div class="deal-meta"><span>${d.time || ""}</span><span>Qty ${d.qty || ""}</span><span>${d.client || ""}</span></div>
+                    <p style="margin-top:0.35rem;font-size:0.88rem;color:var(--text-muted)">${d.note || ""}</p>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          ` : `<p style="color:var(--text-muted)">No block/bulk deals for this name in the latest session.</p>`}
+        </section>
+      `;
+
+      const applyLiveEquity = () => {
+        const dual = (TP.liveEquities && TP.liveEquities[symbol]) || null;
+        if (!dual) return;
+        const nse = dual.nse || {};
+        const bse = dual.bse || {};
+        const nsePriceEl = document.getElementById("nsePrice");
+        const nseChgEl = document.getElementById("nseChg");
+        const nseModeEl = document.getElementById("nseMode");
+        const nseLabelEl = document.getElementById("nseLabel");
+        const bsePriceEl = document.getElementById("bsePrice");
+        const bseChgEl = document.getElementById("bseChg");
+        const bseModeEl = document.getElementById("bseMode");
+        const bseLabelEl = document.getElementById("bseLabel");
+        if (nse.value != null && nsePriceEl) {
+          nsePriceEl.textContent = "₹" + TP.helpers.fmtNum(nse.value);
+          if (nseChgEl) {
+            nseChgEl.textContent = TP.helpers.fmtPct(nse.pct ?? 0) + " · NSE";
+            nseChgEl.className = "stat-delta " + ((nse.pct ?? 0) >= 0 ? "up" : "down");
+          }
+          if (nseModeEl) nseModeEl.textContent = nse.quoteMode === "live" ? "live" : "last close";
+          if (nseLabelEl) nseLabelEl.textContent = nse.label || nse.asOf || "";
+        }
+        if (bse.value != null && bsePriceEl) {
+          bsePriceEl.textContent = "₹" + TP.helpers.fmtNum(bse.value);
+          if (bseChgEl) {
+            bseChgEl.textContent = TP.helpers.fmtPct(bse.pct ?? 0) + " · BSE";
+            bseChgEl.className = "stat-delta " + ((bse.pct ?? 0) >= 0 ? "up" : "down");
+          }
+          if (bseModeEl) bseModeEl.textContent = bse.quoteMode === "live" ? "live" : "last close";
+          if (bseLabelEl) bseLabelEl.textContent = bse.label || bse.asOf || "";
+        }
+      };
+      document.addEventListener("tp:quotes", applyLiveEquity);
+      applyLiveEquity();
+      });
+    });
+  </script>
+</body>
+</html>

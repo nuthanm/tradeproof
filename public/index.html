@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TradeProof — Institutional flow forecasting for India</title>
+  <meta name="description" content="TradeProof — educational market research for Nifty 50, Sensex, FII/DII flows, and weekly options structure. Not investment advice." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html">
+        <span class="logo-mark" aria-hidden="true"></span>
+        TradeProof
+      </a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="dashboard.html">Open live board →</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero container">
+      <div class="hero-content rise">
+        <div class="eyebrow">NSE · BSE · Nifty 50 · Top 100 · Penny</div>
+        <h1 class="hero-brand">TradeProof</h1>
+        <p class="hero-headline">Breakouts, Nifty options reversals, and 7-day probabilities — with fundamentals that matter.</p>
+        <p class="hero-sub">Equity trend scans, index options reversal desk, KPI ratings, and a separate penny-stock risk desk.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="signals.html">View breakouts</a>
+          <a class="btn btn-ghost" href="options.html">Nifty options reversal</a>
+        </div>
+      </div>
+
+      <div class="hero-visual" id="heroPulse" aria-hidden="true">
+        <div class="hero-card">
+          <div class="hero-card-label">NIFTY 50 · NSE · live</div>
+          <div class="hero-card-row">
+            <div class="hero-card-value" id="heroNiftyValue">—</div>
+            <div class="hero-card-pct" id="heroNiftyPct"></div>
+          </div>
+          <div class="hero-card-sub" id="heroSensexLine">SENSEX · BSE loading…</div>
+          <div class="hero-card-sub" id="heroSessionLine" style="margin-top:0.25rem;font-size:0.78rem"></div>
+          <div class="hero-card-chart" id="heroChart"></div>
+          <div class="hero-card-flow" id="heroFlow">FII / DII updating…</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-head rise">
+          <div class="eyebrow">How it works</div>
+          <h2>Four desks. One research workflow.</h2>
+          <p>From blue-chip breakouts to Nifty options reversals and high-risk pennies — always with probability and reasons.</p>
+        </div>
+        <div class="feature-row">
+          <article class="feature rise rise-d1">
+            <div class="eyebrow">01</div>
+            <h3>Equity breakouts</h3>
+            <p>Scan Nifty 50 and India Top 100 for real trend / breakout structure — confirmed, forming, or none.</p>
+          </article>
+          <article class="feature rise rise-d2">
+            <div class="eyebrow">02</div>
+            <h3>7-day forecast</h3>
+            <p>Each name gets Up / Down with an explicit probability %, driven by volume, deals, and flows.</p>
+          </article>
+          <article class="feature rise rise-d3">
+            <div class="eyebrow">03</div>
+            <h3>Nifty options reversal</h3>
+            <p>Dedicated index-options desk for reversal setups using PCR, VIX, and participant positioning.</p>
+          </article>
+        </div>
+        <div class="feature-row" style="margin-top:1.5rem">
+          <article class="feature">
+            <div class="eyebrow">04</div>
+            <h3>Fundamentals & events</h3>
+            <p>P/E and key KPIs, 3-year performance rating, plus reasons behind sudden rises and falls.</p>
+          </article>
+          <article class="feature">
+            <div class="eyebrow">05</div>
+            <h3>Penny desk (&lt; ₹25)</h3>
+            <p>Separate high-risk screen with 1–10 rating, risk–reward, and 6–12 month tactical guidance.</p>
+          </article>
+          <article class="feature">
+            <div class="eyebrow">06</div>
+            <h3>FII / DII + deals</h3>
+            <p>Institutional cash nets and block/bulk prints still power the short-term bias engine.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <div class="eyebrow">Product preview</div>
+          <h2>What your team will open every evening.</h2>
+          <p>Market pulse, ranked stock signals, and a live deals feed — designed for research desks and serious retail.</p>
+        </div>
+        <div class="grid-3">
+          <a class="panel rise" href="signals.html" style="display:block">
+            <div class="panel-title">Breakouts</div>
+            <div class="stat-value" style="font-size:1.5rem">7-day prob</div>
+            <p class="stat-label" style="margin-top:0.75rem">Nifty 50 & Top 100 trend scans with Up/Down probability.</p>
+          </a>
+          <a class="panel rise rise-d1" href="options.html" style="display:block">
+            <div class="panel-title">Nifty Options</div>
+            <div class="stat-value" style="font-size:1.5rem">Reversal</div>
+            <p class="stat-label" style="margin-top:0.75rem">Index options desk focused on reversal probability & levels.</p>
+          </a>
+          <a class="panel rise rise-d2" href="penny.html" style="display:block">
+            <div class="panel-title">Penny stocks</div>
+            <div class="stat-value" style="font-size:1.5rem">&lt; ₹25</div>
+            <p class="stat-label" style="margin-top:0.75rem">Fundamentals rating 1–10, risk–reward, 6–12M suggestions.</p>
+          </a>
+        </div>
+        <div style="margin-top:2rem">
+          <a class="btn btn-primary" href="signals.html">Open live board →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    function paintHero() {
+      const nifty = (TP.indices && TP.indices.nifty) || TP.nifty || {};
+      const sensex = (TP.indices && TP.indices.sensex) || TP.sensex || {};
+      const flows = TP.flows || {};
+      const sess = TP.session || {};
+      const valEl = document.getElementById("heroNiftyValue");
+      const pctEl = document.getElementById("heroNiftyPct");
+      const sensexEl = document.getElementById("heroSensexLine");
+      const flowEl = document.getElementById("heroFlow");
+      const chartEl = document.getElementById("heroChart");
+      const labelEl = document.querySelector(".hero-card-label");
+      if (!valEl) return;
+      if (nifty.value != null) {
+        valEl.textContent = TP.helpers.fmtNum(nifty.value, 0);
+        const pct = nifty.pct ?? 0;
+        pctEl.textContent = TP.helpers.fmtPct(pct);
+        pctEl.className = "hero-card-pct " + (pct >= 0 ? "up" : "down");
+      }
+      if (labelEl) {
+        const mode = nifty.quoteMode === "live" ? "LIVE" : nifty.quoteMode === "unavailable" ? "UNAVAILABLE" : "LAST CLOSE";
+        const src = nifty.dataSource ? ` · ${String(nifty.dataSource).toUpperCase()}` : "";
+        labelEl.textContent = `NIFTY 50 · NSE · ${mode}${src}`;
+      }
+      if (sensex.value != null) {
+        const smode = sensex.quoteMode === "live" ? "live" : "close";
+        sensexEl.textContent = `SENSEX · BSE ${TP.helpers.fmtNum(sensex.value, 0)} (${TP.helpers.fmtPct(sensex.pct ?? 0)}) · ${smode}`;
+      }
+      const fii = flows.fii?.net;
+      const dii = flows.dii?.net;
+      if (fii != null) {
+        const sign = fii >= 0 ? "+" : "";
+        flowEl.textContent = `FII net ${sign}₹${Number(fii).toLocaleString("en-IN")} Cr · DII net ${dii >= 0 ? "+" : ""}₹${Number(dii || 0).toLocaleString("en-IN")} Cr`;
+      }
+      const sessLine = document.getElementById("heroSessionLine");
+      if (sessLine) {
+        const stale = nifty.isStale ? `<span class="badge badge-warn" style="margin-right:0.35rem">Delayed feed</span>` : "";
+        sessLine.innerHTML = stale + (nifty.label || sess.label || "Awaiting live quote…");
+      }
+      const series = nifty.series || [];
+      if (series.length >= 2 && chartEl) {
+        chartEl.innerHTML = TPUI.sparkline(series, { id: "heroNifty", w: 560, h: 180, dates: nifty.seriesDates || [] });
+      }
+    }
+    document.addEventListener("tp:pulse", paintHero);
+    document.addEventListener("tp:quotes", paintHero);
+    document.addEventListener("DOMContentLoaded", () => {
+      TPUI.whenReady(paintHero);
+    });
+  </script>
+</body>
+</html>

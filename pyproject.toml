@@ -1,0 +1,19 @@
+[project]
+name = "tradeproof"
+version = "0.1.0"
+description = "Educational Indian market research board"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "yfinance>=0.2.40",
+  "pandas>=2.2.0",
+  "numpy>=1.26.0",
+  "requests>=2.32.0",
+  "nselib>=2.0.0",
+  "python-dateutil>=2.9.0",
+  "httpx>=0.27.0",
+]
+
+[tool.vercel]
+entrypoint = "app.main:app"

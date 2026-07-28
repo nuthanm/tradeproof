@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Breakout Signals — TradeProof</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark"></span>TradeProof</a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="options.html">Nifty reversal →</a>
+    </div>
+  </header>
+
+  <main class="page container">
+    <div class="page-header">
+      <div class="eyebrow">Nifty 50 · India Top 100</div>
+      <h1>Breakout & 7-day forecasts</h1>
+      <p>Real trend / breakout scan for equities, with next-7-day direction and probability % from volume, deals, and institutional flow.</p>
+      <div id="liveBanner" class="meta-bar" style="margin-top:0.75rem;margin-bottom:0">Connecting…</div>
+    </div>
+
+    <div class="toolbar rise">
+      <input type="search" id="search" placeholder="Search symbol or name…" />
+      <select id="universeFilter">
+        <option value="all">All universes</option>
+        <option value="Nifty 50">Nifty 50</option>
+        <option value="Top 100">India Top 100</option>
+      </select>
+      <select id="breakoutFilter">
+        <option value="all">All breakout states</option>
+        <option value="confirmed">Confirmed breakout</option>
+        <option value="forming">Forming</option>
+        <option value="none">No breakout</option>
+      </select>
+      <select id="dirFilter">
+        <option value="all">7D Up & Down</option>
+        <option value="Up">7D Up</option>
+        <option value="Down">7D Down</option>
+      </select>
+      <span id="resultCount" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto"></span>
+    </div>
+
+    <div class="table-wrap rise">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>NSE · BSE</th>
+            <th>Breakout</th>
+            <th>7D forecast</th>
+            <th>Prob %</th>
+            <th>Expected range</th>
+            <th>Call / Put · NSE|BSE</th>
+            <th>3Y rating</th>
+          </tr>
+        </thead>
+        <tbody id="signalsBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    function render() {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const universe = document.getElementById("universeFilter").value;
+      const breakout = document.getElementById("breakoutFilter").value;
+      const dir = document.getElementById("dirFilter").value;
+
+      let rows = [...TP.stocks];
+      if (q) rows = rows.filter((s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+      if (universe !== "all") rows = rows.filter((s) => s.universe.includes(universe));
+      if (breakout !== "all") rows = rows.filter((s) => s.breakout === breakout);
+      if (dir !== "all") rows = rows.filter((s) => s.forecast7d.direction === dir);
+
+      rows.sort((a, b) => {
+        const rank = { confirmed: 0, forming: 1, none: 2 };
+        if (rank[a.breakout] !== rank[b.breakout]) return rank[a.breakout] - rank[b.breakout];
+        return b.forecast7d.probability - a.forecast7d.probability;
+      });
+
+      document.getElementById("resultCount").textContent = `${rows.length} equities`;
+      document.getElementById("signalsBody").innerHTML = rows.map((s) => {
+        const f = s.forecast7d;
+        if (!f.min && TP.helpers.enrichStock) TP.helpers.enrichStock(s);
+        const ovN = s.optionVolumeNse || s.optionVolume || { call: 1, put: 1 };
+        const ovB = s.optionVolumeBse;
+        const callPctN = ((ovN.call / (ovN.call + ovN.put || 1)) * 100).toFixed(0);
+        const bseAvail = ovB && ovB.available !== false && ((ovB.call || 0) + (ovB.put || 0) > 0);
+        const callPctB = bseAvail ? ((ovB.call / (ovB.call + ovB.put || 1)) * 100).toFixed(0) : null;
+        const nsePx = s.priceNse ?? s.price;
+        const bsePx = s.priceBse;
+        const nseChg = s.changeNse ?? s.change;
+        const bseChg = s.changeBse;
+        return `
+        <tr class="clickable" onclick="location.href='stock.html?symbol=${s.symbol}'">
+          <td>
+            <a class="symbol-link" href="stock.html?symbol=${s.symbol}" onclick="event.stopPropagation()">
+              <div class="symbol">${s.symbol}<small>${s.name} · ${(s.universe || []).join(" · ")}</small></div>
+            </a>
+          </td>
+          <td>
+            <div><span class="exch-tag">NSE</span> <strong>₹${TP.helpers.fmtNum(nsePx)}</strong>
+              <span class="${(nseChg ?? 0) >= 0 ? "up" : "down"}" style="font-size:0.75rem">${TP.helpers.fmtPct(nseChg ?? 0)}</span></div>
+            <div style="margin-top:0.25rem"><span class="exch-tag">BSE</span> ${bsePx != null && Number.isFinite(Number(bsePx)) ? `<strong>₹${TP.helpers.fmtNum(bsePx)}</strong> <span class="${(bseChg ?? 0) >= 0 ? "up" : "down"}" style="font-size:0.75rem">${TP.helpers.fmtPct(bseChg ?? 0)}</span>` : '<span style="color:var(--text-muted)">loading…</span>'}</div>
+          </td>
+          <td>${TP.helpers.breakoutBadge(s.breakout)}<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;max-width:160px;white-space:normal">${s.breakoutNote || ""}</div></td>
+          <td>${TP.helpers.dirBadge(f.direction)}</td>
+          <td><span class="prob"><em>${f.probability}%</em></span></td>
+          <td class="range-cell">
+            ₹${TP.helpers.fmtNum(f.min)} – ₹${TP.helpers.fmtNum(f.max)}
+            <small>Min → Max · 7D</small>
+          </td>
+          <td style="min-width:150px">
+            <div class="speed-bar speed-bar-mini" title="NSE">
+              <div class="speed-bar-labels"><span class="up">NSE C ${callPctN}%</span><span class="down">P ${100 - callPctN}%</span></div>
+              <div class="speed-bar-track"><div class="speed-bar-call" style="width:${callPctN}%"></div><div class="speed-bar-put" style="width:${100 - callPctN}%"></div></div>
+            </div>
+            ${bseAvail ? `
+            <div class="speed-bar speed-bar-mini" style="margin-top:0.35rem" title="BSE cash proxy">
+              <div class="speed-bar-labels"><span class="up">BSE C ${callPctB}%</span><span class="down">P ${100 - callPctB}%</span></div>
+              <div class="speed-bar-track"><div class="speed-bar-call" style="width:${callPctB}%"></div><div class="speed-bar-put" style="width:${100 - callPctB}%"></div></div>
+            </div>` : `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--text-muted)">BSE C/P n/a</div>`}
+          </td>
+          <td><span class="rating-pill">${Number(s.rating3y).toFixed(1)} / 10</span></td>
+        </tr>
+      `;
+      }).join("") || `<tr><td colspan="8" style="color:var(--text-muted)">No matches</td></tr>`;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      ["search", "universeFilter", "breakoutFilter", "dirFilter"].forEach((id) => {
+        document.getElementById(id).addEventListener("input", render);
+        document.getElementById(id).addEventListener("change", render);
+      });
+      TPUI.whenReady(render);
+      document.addEventListener("tp:quotes", render);
+    });
+  </script>
+</body>
+</html>

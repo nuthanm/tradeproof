@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Market Pulse — TradeProof</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="bg-mesh" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="index.html"><span class="logo-mark"></span>TradeProof</a>
+      <button class="nav-toggle" type="button" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="index.html" data-nav="index.html">Home</a></li>
+        <li><a href="dashboard.html" data-nav="dashboard.html">Market Pulse</a></li>
+        <li><a href="signals.html" data-nav="signals.html">Breakouts</a></li>
+        <li><a href="options.html" data-nav="options.html">Nifty Options</a></li>
+        <li><a href="penny.html" data-nav="penny.html">Penny</a></li>
+        <li><a href="deals.html" data-nav="deals.html">Deals</a></li>
+      </ul>
+      <a class="nav-cta" href="signals.html">View breakouts →</a>
+    </div>
+  </header>
+
+  <main class="page container">
+    <div class="page-header">
+      <div class="eyebrow">Live board</div>
+      <h1>Market Pulse</h1>
+      <p>Institutional picture for Nifty 50 and Sensex — flows, volatility, and overall bias.</p>
+      <div id="liveBanner" class="meta-bar" style="margin-top:0.75rem">Connecting to live feeds…</div>
+    </div>
+
+    <div class="meta-bar rise" id="metaBar"></div>
+
+    <div class="grid-4" id="indexCards" style="margin-bottom:1rem"></div>
+
+    <div class="grid-2" style="margin-bottom:1rem">
+      <section class="panel rise rise-d1">
+        <div class="panel-title">
+          <span>FII / DII cash activity (₹ Cr)</span>
+          <span class="badge badge-warn">Provisional EOD</span>
+        </div>
+        <div class="flow-bars" id="flowBars"></div>
+        <p id="flowNote" style="margin-top:1rem;color:var(--text-muted);font-size:0.9rem"></p>
+      </section>
+
+      <section class="panel rise rise-d2">
+        <div class="panel-title">
+          <span>Market bias score</span>
+          <span class="live-dot" title="Demo pulse"></span>
+        </div>
+        <div class="score-ring" id="biasRing"></div>
+        <p style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-top:0.5rem">
+          Composite of FII net, DII net, breadth, and deal imbalance
+        </p>
+        <div style="display:flex;justify-content:center;gap:0.75rem;margin-top:1rem;flex-wrap:wrap">
+          <a class="btn btn-primary" href="signals.html">Equity breakouts</a>
+          <a class="btn btn-ghost" href="options.html">Nifty reversal</a>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel rise rise-d3">
+      <div class="panel-title">
+        <span>Top conviction breakouts</span>
+        <a href="signals.html" style="color:var(--brand);font-size:0.85rem">See all →</a>
+      </div>
+      <div class="table-wrap" style="border:none;background:transparent;box-shadow:none">
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Breakout</th>
+              <th>7D</th>
+              <th>Prob</th>
+              <th>3Y rating</th>
+            </tr>
+          </thead>
+          <tbody id="topSignals"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" data-footer></footer>
+  <script src="js/data.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const paint = () => {
+      const { indices, flows, stocks, meta, helpers } = TP;
+      if (!indices || !indices.nifty || !flows || !flows.fii) return;
+
+      document.getElementById("metaBar").innerHTML = `
+        <span style="display:inline-flex;align-items:center;gap:0.4rem"><span class="live-dot"></span> <strong>${TP.live ? ((TP.session && TP.session.isOpen) ? "Market open" : "Session closed") : "Offline"}</strong></span>
+        <span>As of <strong>${meta.asOf}</strong></span>
+        <span>${(TP.session && TP.session.label) || meta.session || ""}</span>
+        <span>Universe: <strong>${meta.universe}</strong></span>
+      `;
+
+      const cards = [
+        indices.nifty,
+        indices.sensex,
+        indices.vix,
+        { name: "FII net", value: flows.fii.net, change: flows.fii.net, pct: null, isFlow: true }
+      ];
+
+      document.getElementById("indexCards").innerHTML = cards.map((c) => {
+        const up = (c.pct != null ? c.pct : c.change) >= 0;
+        const delta = c.isFlow
+          ? `<div class="stat-delta ${up ? "up" : "down"}">${helpers.fmtCr(c.value)}</div>`
+          : `<div class="stat-delta ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${helpers.fmtPct(c.pct)}</div>`;
+        const val = c.isFlow ? helpers.fmtCr(c.value).replace("+","").replace("-","−") : helpers.fmtNum(c.value);
+        const mode = c.isFlow ? "" : (c.quoteMode === "live" ? "Live" : "Last close");
+        return `
+          <article class="panel">
+            <div class="panel-title">${c.name}${c.exchange ? ` · ${c.exchange}` : ""}${mode ? ` · ${mode}` : ""}</div>
+            <div class="stat-value">${c.isFlow ? (c.value >= 0 ? "+" : "−") + "₹" + Math.abs(c.value).toLocaleString("en-IN") : val}</div>
+            ${c.isFlow ? `<div class="stat-label">Cash market · ₹ Cr</div>` : `${delta}<div class="stat-label">${c.label || c.asOf || ""}</div>`}
+          </article>
+        `;
+      }).join("");
+
+      const maxAbs = Math.max(Math.abs(flows.fii.net), Math.abs(flows.dii.net), 1);
+      document.getElementById("flowBars").innerHTML = `
+        <div class="flow-row">
+          <strong>FII</strong>
+          <div class="flow-track"><div class="flow-fill fii" style="width:${Math.min(100, (Math.abs(flows.fii.net) / maxAbs) * 100)}%"></div></div>
+          <span class="${flows.fii.net >= 0 ? "up" : "down"}">${helpers.fmtCr(flows.fii.net)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.8rem;color:var(--text-muted);padding-left:56px">
+          <span>Buy ₹${flows.fii.buy.toLocaleString("en-IN")} Cr</span>
+          <span>Sell ₹${flows.fii.sell.toLocaleString("en-IN")} Cr</span>
+        </div>
+        <div class="flow-row" style="margin-top:0.75rem">
+          <strong>DII</strong>
+          <div class="flow-track"><div class="flow-fill dii" style="width:${Math.min(100, (Math.abs(flows.dii.net) / maxAbs) * 100)}%"></div></div>
+          <span class="${flows.dii.net >= 0 ? "up" : "down"}">${helpers.fmtCr(flows.dii.net)}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.8rem;color:var(--text-muted);padding-left:56px">
+          <span>Buy ₹${flows.dii.buy.toLocaleString("en-IN")} Cr</span>
+          <span>Sell ₹${flows.dii.sell.toLocaleString("en-IN")} Cr</span>
+        </div>
+      `;
+      document.getElementById("flowNote").textContent = flows.note;
+
+      const score = flows.biasScore;
+      const color = score >= 60 ? "#22c55e" : score <= 40 ? "#ef4444" : "#f59e0b";
+      const circ = 2 * Math.PI * 52;
+      const offset = circ - (score / 100) * circ;
+      document.getElementById("biasRing").innerHTML = `
+        <svg width="120" height="120" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(148,163,184,0.15)" stroke-width="10"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="${color}" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+            style="transition: stroke-dashoffset 1s ease"/>
+        </svg>
+        <div class="score-ring-label">
+          <strong>${score}</strong>
+          <span>${flows.bias}</span>
+        </div>
+      `;
+
+      const top = [...stocks]
+        .filter((s) => s.breakout !== "none")
+        .sort((a, b) => b.forecast7d.probability - a.forecast7d.probability)
+        .slice(0, 5);
+      document.getElementById("topSignals").innerHTML = top.map((s) => `
+        <tr class="clickable" onclick="location.href='stock.html?symbol=${s.symbol}'">
+          <td><div class="symbol">${s.symbol}<small>${s.name}</small></div></td>
+          <td>${helpers.breakoutBadge(s.breakout)}</td>
+          <td>${helpers.dirBadge(s.forecast7d.direction)}</td>
+          <td><strong>${s.forecast7d.probability}%</strong></td>
+          <td><span class="rating-pill">${Number(s.rating3y).toFixed(1)} / 10</span></td>
+        </tr>
+      `).join("") || `<tr><td colspan="5" style="color:var(--text-muted)">No breakouts in this scan</td></tr>`;
+      };
+      document.addEventListener("tp:pulse", paint);
+      document.addEventListener("tp:quotes", paint);
+      TPUI.whenReady(paint);
+    });
+  </script>
+</body>
+</html>
