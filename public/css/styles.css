@@ -607,6 +607,49 @@ img {
 
 .spot-why {
   margin-top: 0.55rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.daily-forecast-wrap {
+  overflow-x: auto;
+}
+
+.daily-forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.daily-forecast-table th,
+.daily-forecast-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.daily-forecast-table thead th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.daily-forecast-table .daily-comment {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-width: 28rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .daily-forecast-table .daily-comment {
+    max-width: 16rem;
+  }
+}
   font-size: 0.88rem;
   line-height: 1.45;
 }

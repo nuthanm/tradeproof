@@ -1,7 +1,7 @@
 """Breakout detection, 7-day forecast bands, ratings, penny scoring."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -346,6 +346,289 @@ def forecast_7d(df: pd.DataFrame, breakout: str, fii_net: float) -> dict[str, An
     }
 
 
+def forecast_next_hour_15m(df: pd.DataFrame, lookback: int = 15) -> dict[str, Any]:
+    """
+    Next-1-hour direction from the last `lookback` × 15-minute candles.
+
+    Model blends:
+      1) Linear-regression slope of closes (ATR-normalized)
+      2) EMA(5/9/20) stack alignment on 15m
+      3) Candle body bias (bull vs bear count)
+      4) Structure (higher-highs / lower-lows)
+      5) Volume confirmation (recent vs prior half-window)
+      6) Short RSI-style momentum
+
+    Output direction: Uptrend | Sideways | Downtrend — locked for option-spot selection.
+    """
+    empty = {
+        "direction": "Sideways",
+        "probability": 50,
+        "score": 0.0,
+        "expectedMovePct": 0.15,
+        "atr": None,
+        "last": None,
+        "barsUsed": 0,
+        "horizon": "Next 1 hour (4 × 15m)",
+        "method": "Insufficient 15m history",
+        "drivers": [],
+        "validCandles": lookback,
+    }
+    if df is None or df.empty or "Close" not in df.columns:
+        return empty
+
+    frame = df.dropna(subset=["Close"]).iloc[-lookback:].copy()
+    if len(frame) < 8:
+        empty["barsUsed"] = len(frame)
+        return empty
+
+    close = frame["Close"].astype(float)
+    high = frame["High"].astype(float) if "High" in frame.columns else close
+    low = frame["Low"].astype(float) if "Low" in frame.columns else close
+    open_ = frame["Open"].astype(float) if "Open" in frame.columns else close
+    vol = frame["Volume"].astype(float) if "Volume" in frame.columns else pd.Series(np.ones(len(frame)), index=frame.index)
+
+    last = float(close.iloc[-1])
+    # True-range ATR (Wilder-ish simple mean of last N)
+    prev_close = close.shift(1)
+    tr = pd.concat([(high - low).abs(), (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+    atr = float(tr.dropna().iloc[-min(14, len(tr.dropna())) :].mean()) if tr.notna().any() else last * 0.0015
+    if not np.isfinite(atr) or atr <= 0:
+        atr = last * 0.0015
+
+    # 1) OLS slope of closes, normalized by ATR per bar
+    x = np.arange(len(close), dtype=float)
+    y = close.values.astype(float)
+    slope = float(np.polyfit(x, y, 1)[0]) if len(close) >= 3 else 0.0
+    slope_score = float(np.clip((slope / atr) * 4.0, -3.5, 3.5))
+
+    # 2) EMA stack on 15m
+    e5 = float(ema(close, 5).iloc[-1])
+    e9 = float(ema(close, 9).iloc[-1])
+    e20 = float(ema(close, min(20, max(5, len(close) - 1))).iloc[-1])
+    ema_score = 0.0
+    if e5 > e9 > e20:
+        ema_score = 2.4
+    elif e5 < e9 < e20:
+        ema_score = -2.4
+    else:
+        ema_score = float(np.clip(((e5 - e20) / atr), -1.5, 1.5))
+    if last > e5:
+        ema_score += 0.6
+    elif last < e5:
+        ema_score -= 0.6
+
+    # 3) Candle body bias
+    bodies = (close - open_).values
+    bull = int(np.sum(bodies > 0))
+    bear = int(np.sum(bodies < 0))
+    body_score = float(np.clip((bull - bear) / max(len(bodies), 1) * 3.0, -2.0, 2.0))
+
+    # 4) HH / LL structure over last half vs prior half
+    mid = len(high) // 2
+    hh = float(high.iloc[mid:].max() - high.iloc[:mid].max())
+    ll = float(low.iloc[:mid].min() - low.iloc[mid:].min())
+    struct_score = float(np.clip(((hh + ll) / atr) * 0.9, -2.0, 2.0))
+
+    # 5) Volume confirmation
+    half = max(3, len(vol) // 2)
+    vol_recent = float(vol.iloc[-half:].mean() or 0)
+    vol_prior = float(vol.iloc[:-half].mean() or 1) or 1.0
+    vol_ratio = vol_recent / vol_prior
+    vol_boost = float(np.clip((vol_ratio - 1.0) * 1.5, -1.2, 1.5))
+
+    # 6) RSI-lite (9-period) momentum
+    delta = close.diff()
+    gain = delta.clip(lower=0).rolling(9, min_periods=3).mean()
+    loss = (-delta.clip(upper=0)).rolling(9, min_periods=3).mean()
+    rs = float(gain.iloc[-1] / loss.iloc[-1]) if loss.iloc[-1] and loss.iloc[-1] > 0 else 1.0
+    rsi = 100 - (100 / (1 + rs)) if np.isfinite(rs) else 50.0
+    rsi_score = float(np.clip((rsi - 50) / 18.0, -2.0, 2.0))
+
+    raw = slope_score + ema_score + body_score + struct_score + vol_boost * np.sign(slope_score or ema_score or 0.01) + rsi_score
+    if not np.isfinite(raw):
+        raw = 0.0
+
+    # Sideways band: weak directional edge over the next hour
+    if abs(raw) < 1.35:
+        direction = "Sideways"
+    elif raw > 0:
+        direction = "Uptrend"
+    else:
+        direction = "Downtrend"
+
+    # Probability: map |raw| → 52–88; sideways caps lower
+    strength = abs(raw)
+    if direction == "Sideways":
+        prob = int(np.clip(48 + strength * 6, 48, 62))
+    else:
+        prob = int(np.clip(55 + strength * 7 + (4 if vol_ratio >= 1.15 else 0), 55, 88))
+
+    # Expected 1h move ≈ 2 × 15m ATR in favored direction (sqrt time ≈ 2 bars of 15m into 1h… use ~2.0 ATR)
+    expected_move_pct = round(float((atr * 2.0) / last * 100), 3) if last else 0.15
+
+    drivers = [
+        f"15m slope {slope:+.2f}/bar ({slope_score:+.1f} ATR-score)",
+        f"EMA5/9/20 {'bull' if ema_score > 0 else 'bear' if ema_score < 0 else 'flat'} stack",
+        f"Candles {bull}↑ / {bear}↓ in last {len(frame)}",
+        f"Vol ratio {vol_ratio:.2f}× vs prior half-window",
+        f"RSI9 ≈ {rsi:.0f}",
+    ]
+    method = (
+        f"Last {len(frame)} × 15m candles → next-1-hour {direction} at {prob}%. "
+        "Uses ATR-normalized regression slope, 5/9/20 EMA stack, candle body bias, "
+        "HH/LL structure, volume confirmation, and RSI9. Educational model only."
+    )
+
+    return {
+        "direction": direction,
+        "probability": prob,
+        "score": round(float(raw), 2),
+        "expectedMovePct": expected_move_pct,
+        "atr": round(atr, 2),
+        "last": round(last, 2),
+        "barsUsed": len(frame),
+        "horizon": "Next 1 hour (4 × 15m)",
+        "method": method,
+        "drivers": drivers,
+        "validCandles": 4,
+        "ema15m": {"ema5": round(e5, 2), "ema9": round(e9, 2), "ema20": round(e20, 2)},
+        "rsi9": round(rsi, 1),
+    }
+
+
+def forecast_7d_daily(
+    df: pd.DataFrame,
+    breakout: str,
+    fii_net: float,
+    f7: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Next 7 trading sessions: per-day low/high, trend, probability, and reason.
+    Built on the same EMA/S/R/vol core as forecast_7d, with day-step volatility expansion.
+    """
+    f7 = f7 or forecast_7d(df, breakout, fii_net)
+    last = float(f7.get("last") or 0)
+    if last <= 0:
+        return []
+
+    close = df["Close"].dropna()
+    rets = close.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+    daily_vol = float(rets.iloc[-20:].std()) if len(rets) >= 5 else 0.015
+    if not np.isfinite(daily_vol) or daily_vol <= 0:
+        daily_vol = 0.015
+
+    base_dir = f7["direction"]  # Up / Down
+    base_prob = int(f7["probability"])
+    ema_sc = int(f7.get("emaScore") or 5)
+    levels = f7.get("levels") or support_resistance(df)
+    mom5 = float(close.iloc[-1] / close.iloc[-6] - 1) if len(close) > 6 else 0.0
+    if not np.isfinite(mom5):
+        mom5 = 0.0
+
+    # Mean-reversion pull: after strong 5D moves, later days lean back
+    mr = float(np.clip(-mom5 * 8, -1.2, 1.2))
+
+    rows: list[dict[str, Any]] = []
+    cursor = date.today()
+    day_i = 0
+    guard = 0
+    while len(rows) < 7 and guard < 20:
+        guard += 1
+        cursor = cursor + timedelta(days=1)
+        if cursor.weekday() >= 5:
+            continue
+        day_i += 1
+
+        # Directional drift decays; later days get more mean-reversion / uncertainty
+        decay = 1.0 - (day_i - 1) * 0.07
+        day_score = (1.0 if base_dir == "Up" else -1.0) * (base_prob - 50) / 20.0 * decay + mr * (day_i / 7.0)
+        if breakout == "confirmed":
+            day_score += 0.35 * decay * (1.0 if base_dir == "Up" else -1.0)
+        elif breakout == "none":
+            day_score *= 0.75
+
+        if abs(day_score) < 0.45:
+            trend = "Sideways"
+        elif day_score > 0:
+            trend = "Up"
+        else:
+            trend = "Down"
+
+        if trend == "Sideways":
+            prob = int(np.clip(50 + abs(day_score) * 12 + ema_sc * 0.4, 48, 68))
+        else:
+            # Align with base conviction early; fade later
+            align = 1.0 if (trend == base_dir or (base_dir == "Up" and trend == "Up") or (base_dir == "Down" and trend == "Down")) else 0.85
+            prob = int(np.clip((base_prob - (day_i - 1) * 2.5) * align + ema_sc * 0.6, 52, 92))
+
+        # Expanding band with √day and directional skew
+        move = daily_vol * np.sqrt(day_i)
+        if trend == "Up":
+            up_m = move * (1.1 + (prob - 50) / 220)
+            dn_m = move * (0.55 + (100 - prob) / 280)
+            path = last * (1 + up_m * 0.55 * day_i / max(day_i, 1) * 0.35)
+        elif trend == "Down":
+            dn_m = move * (1.1 + (prob - 50) / 220)
+            up_m = move * (0.55 + (100 - prob) / 280)
+            path = last * (1 - dn_m * 0.55 * 0.35)
+        else:
+            up_m = move * 0.85
+            dn_m = move * 0.85
+            path = last
+
+        # Center the day band around a progressive path midpoint
+        mid = last + (path - last) * (day_i / 7.0)
+        dmin = round(float(mid * (1 - dn_m)), 2)
+        dmax = round(float(mid * (1 + up_m)), 2)
+        if dmin > dmax:
+            dmin, dmax = dmax, dmin
+
+        # Day-specific comment
+        bits: list[str] = []
+        if day_i == 1:
+            bits.append(f"Near-term lean {trend} from 50/200 EMA + breakout={breakout}")
+        elif day_i <= 3:
+            bits.append(f"Session {day_i}: trend persistence from 5D mom {mom5*100:+.1f}%")
+        else:
+            bits.append(f"Session {day_i}: conviction fades; wider band from realized vol")
+        if levels.get("resistance") and trend == "Up":
+            bits.append(f"Watch resistance ₹{levels['resistance']:,.0f}")
+        if levels.get("support") and trend == "Down":
+            bits.append(f"Watch support ₹{levels['support']:,.0f}")
+        if abs(fii_net) > 500:
+            bits.append(f"FII backdrop ₹{fii_net:+.0f} Cr")
+        if ema_sc >= 8 and trend == base_dir:
+            bits.append(f"EMA score {ema_sc}/10 supports bias")
+        elif ema_sc <= 3:
+            bits.append(f"EMA score {ema_sc}/10 — treat as soft signal")
+
+        rows.append(
+            {
+                "day": day_i,
+                "date": cursor.strftime("%d %b %Y"),
+                "dateIso": cursor.isoformat(),
+                "currentPrice": round(last, 2),
+                "min": dmin,
+                "max": dmax,
+                "trend": trend,
+                "probability": prob,
+                "comment": " · ".join(bits),
+            }
+        )
+
+    # Attach daily rows onto the base forecast for callers that merge
+    f7["daily"] = rows
+    return rows
+
+
+def attach_forecast_daily(f7: dict[str, Any], df: pd.DataFrame, breakout: str, fii_net: float) -> dict[str, Any]:
+    """Ensure forecast7d payload includes the next-7-days table."""
+    daily = forecast_7d_daily(df, breakout, fii_net, f7=f7)
+    out = dict(f7)
+    out["daily"] = daily
+    return out
+
+
 def rating_3y(df: pd.DataFrame) -> float:
     detail = rating_3y_detail(df)
     return detail["rating"]
@@ -559,18 +842,26 @@ def _match_news_near(news: list[dict[str, Any]] | None, day: datetime, window_da
     for n in news:
         raw = str(n.get("published") or "")
         nd = None
-        for candidate in (raw[:19], raw[:10]):
-            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-                try:
-                    nd = datetime.strptime(candidate, fmt)
+        # Prefer epoch when present (fetch_news v2)
+        ts = n.get("publishedTs")
+        if ts is not None:
+            try:
+                nd = datetime.utcfromtimestamp(float(ts))
+            except Exception:  # noqa: BLE001
+                nd = None
+        if nd is None:
+            for candidate in (raw[:19], raw[:16], raw[:10]):
+                for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%d %b %Y %H:%M", "%d %b %Y", "%Y-%m-%d"):
+                    try:
+                        nd = datetime.strptime(candidate.strip(), fmt)
+                        break
+                    except Exception:  # noqa: BLE001
+                        continue
+                if nd is not None:
                     break
-                except Exception:  # noqa: BLE001
-                    continue
-            if nd is not None:
-                break
         if nd is None:
             continue
-        if abs((nd.replace(tzinfo=None) - day).days) <= window_days:
+        if abs((nd.date() - day.date()).days) <= window_days:
             matched.append(n)
     return matched[:3]
 
@@ -744,7 +1035,8 @@ def trend_label(direction: str, probability: int, breakout: str) -> str:
 
 def build_stock_row(symbol: str, df: pd.DataFrame, info: dict[str, Any], flows: dict[str, Any], universe: list[str], deals_for_symbol: list[dict]) -> dict[str, Any]:
     breakout, note = detect_breakout(df)
-    f7 = forecast_7d(df, breakout, float(flows.get("fii", {}).get("net") or 0))
+    fii_net = float(flows.get("fii", {}).get("net") or 0)
+    f7 = attach_forecast_daily(forecast_7d(df, breakout, fii_net), df, breakout, fii_net)
     rating_detail = rating_3y_detail(df)
     dual = fetchers.fetch_dual_last(symbol)
     # Prefer session-aware quote helper when dual BSE is missing
@@ -912,7 +1204,7 @@ def stock_detail(symbol: str) -> dict[str, Any]:
     universe = ["Nifty 50", "Top 100"] if symbol in NIFTY_50 else ["Top 100"]
     row = build_stock_row(symbol, df, info, flows, universe, deals)
     rating = row.get("rating3yDetail") or rating_3y_detail(df)
-    news = fetchers.fetch_news(symbol, limit=8)
+    news = fetchers.fetch_news(symbol, limit=12, days=7)
     # Re-score sudden moves with company headlines + deal prints for dated causes
     events = detect_events(df, symbol=symbol, news=news, deals=deals)
     row["events"] = events
@@ -924,10 +1216,17 @@ def stock_detail(symbol: str) -> dict[str, Any]:
         row["dealValue"],
     )
     ema_detail = row["forecast7d"].get("emaScoreDetail") or {}
+    daily = row["forecast7d"].get("daily") or []
+    day1 = daily[0] if daily else None
+    day1_note = (
+        f" Day-1 ({day1['date']}): {day1['trend']} {day1['probability']}% · ₹{day1['min']}–₹{day1['max']}."
+        if day1
+        else ""
+    )
     thesis = (
         f"7-day model leans {row['forecast7d']['direction']} at {row['forecast7d']['probability']}% "
-        f"with expected band Rs {row['forecast7d']['min']} - Rs {row['forecast7d']['max']} "
-        f"(target ~ Rs {row['forecast7d']['target']}). "
+        f"with session-by-session low/high bands (see table)."
+        f"{day1_note} "
         f"EMA score {row['forecast7d'].get('emaScore', 5)}/10. "
         f"{row['forecast7d'].get('probMethod') or ema_detail.get('rationale') or 'Uses 50/200 EMA, S/R, volume, and FII.'}"
     )
@@ -984,14 +1283,39 @@ def nifty_options_reversal() -> dict[str, Any]:
         "last": nifty["value"],
     }
 
+    # 15m → next-1-hour direction (primary for weekly option spots)
+    df_15m = fetchers.fetch_index_intraday_15m("^NSEI", bars=48)
+    hour = forecast_next_hour_15m(df_15m, lookback=15) if not df_15m.empty else {
+        "direction": "Sideways",
+        "probability": 50,
+        "method": "15m feed unavailable — defaulting to sideways.",
+        "barsUsed": 0,
+        "drivers": [],
+        "expectedMovePct": 0.15,
+        "horizon": "Next 1 hour (4 × 15m)",
+    }
+    hour_dir = hour.get("direction") or "Sideways"
+    # Map hour model → CE/PE bias (Sideways → no aggressive chase; still publish ATM defined-risk)
+    if hour_dir == "Uptrend":
+        opt_bias = "Up"
+        signal = "1h uptrend watch · prefer liquid Calls"
+    elif hour_dir == "Downtrend":
+        opt_bias = "Down"
+        signal = "1h downtrend watch · prefer liquid Puts"
+    else:
+        opt_bias = "Sideways"
+        signal = "1h sideways · defined-risk only / stand aside preferred"
+
     # Prefer chain aggregate volumes when available
     call = int(chain.get("callVol") or opt.get("call") or 0)
     put = int(chain.get("putVol") or opt.get("put") or 0)
+    vol_dir = "Up" if hour_dir == "Uptrend" else ("Down" if hour_dir == "Downtrend" else f7["direction"])
+    vol_prob = int(hour.get("probability") or f7["probability"])
     if call + put == 0:
         proxy = option_volume_from_price(
             df if not df.empty else pd.DataFrame({"Volume": [1e6], "Close": [nifty["value"]]}),
-            f7["direction"],
-            f7["probability"],
+            vol_dir,
+            vol_prob,
         )
         call, put = proxy["call"], proxy["put"]
         opt_label = "Proxy call/put volume (chain unavailable)"
@@ -1001,16 +1325,15 @@ def nifty_options_reversal() -> dict[str, Any]:
         source = chain.get("source") or opt.get("source") or "nse_option_chain"
 
     pcr = round(put / call, 2) if call else chain.get("pcrVol")
-    direction = f7["direction"]
-    signal = "Bullish reversal watch" if direction == "Up" else "Bearish reversal watch"
+    direction = hour_dir
     spot = float(chain.get("spot") or nifty["value"] or 0)
     sensex = idx.get("sensex") or {}
     vix_val = _safe_float((idx.get("vix") or {}).get("value"))
     opt_nse = {"call": call, "put": put, "label": f"NSE · {opt_label}", "source": source, "exchange": "NSE"}
     opt_bse_proxy = option_volume_from_price(
         df if not df.empty else pd.DataFrame({"Volume": [8e5], "Close": [sensex.get("value") or spot]}),
-        f7["direction"],
-        f7["probability"],
+        vol_dir,
+        vol_prob,
         scale=0.55,
     )
     opt_bse = {
@@ -1020,8 +1343,16 @@ def nifty_options_reversal() -> dict[str, Any]:
         "exchange": "BSE",
     }
 
-    weekly = build_weekly_option_spots(chain, direction, breakout, int(f7["probability"]), vix_val)
-    hero = build_hero_zero(chain, direction, vix_val)
+    weekly = build_weekly_option_spots(
+        chain,
+        opt_bias,
+        breakout,
+        int(hour.get("probability") or f7["probability"]),
+        vix_val,
+        hour_forecast=hour,
+    )
+    hero_dir = "Up" if opt_bias == "Up" else ("Down" if opt_bias == "Down" else f7["direction"])
+    hero = build_hero_zero(chain, hero_dir, vix_val)
 
     # Levels from OI walls when available
     support_wall = (weekly.get("structure") or {}).get("supportOiWall")
@@ -1043,11 +1374,12 @@ def nifty_options_reversal() -> dict[str, Any]:
         "sensex": sensex,
         "signal": signal,
         "direction": direction,
-        "probability": f7["probability"],
+        "probability": int(hour.get("probability") or f7["probability"]),
         "breakout": breakout,
         "breakoutNote": breakout_note,
-        "horizon": f"Current weekly expiry · {chain.get('expiryLabel') or 'n/a'}",
+        "horizon": hour.get("horizon") or f"Next 1 hour · weekly expiry {chain.get('expiryLabel') or 'n/a'}",
         "setup": (
+            f"1h model: {hour_dir} ({hour.get('probability')}%) · "
             f"FII net ₹{flows.get('fii', {}).get('net', 0)} Cr · "
             f"DII net ₹{flows.get('dii', {}).get('net', 0)} Cr · "
             f"PCR vol {pcr} · PCR OI {chain.get('pcrOi')} · "
@@ -1069,6 +1401,7 @@ def nifty_options_reversal() -> dict[str, Any]:
             "strikeCount": len(chain.get("strikes") or []),
             "error": chain.get("error"),
         },
+        "hourForecast": hour,
         "weeklySpots": weekly,
         "heroZero": hero,
         "forecast7d": {
@@ -1079,16 +1412,16 @@ def nifty_options_reversal() -> dict[str, Any]:
             "target": round(float(f7.get("target", spot)), 2),
         },
         "factors": [
+            {"name": "1h direction (15m)", "value": f"{hour_dir} · {hour.get('probability')}%", "impact": "bull" if hour_dir == "Uptrend" else "bear" if hour_dir == "Downtrend" else "neutral", "note": hour.get("method") or "Last 15 × 15m candles"},
             {"name": "PCR (volume)", "value": str(pcr), "impact": "bull" if pcr and pcr >= 1 else "neutral", "note": "Put vs call traded volume · current expiry"},
             {"name": "PCR (OI)", "value": str(chain.get("pcrOi")), "impact": "bull" if (chain.get("pcrOi") or 0) >= 1 else "neutral", "note": "Open-interest put/call"},
             {"name": "Max pain", "value": str(levels.get("maxPain")), "impact": "neutral", "note": "Strike minimizing option-holder payoff"},
-            {"name": "India VIX", "value": str((idx.get("vix") or {}).get("value", "n/a")), "impact": "neutral", "note": "Fear gauge"},
+            {"name": "India VIX", "value": str((idx.get("vix") or {}).get("value", "n/a")), "impact": "neutral", "note": "Fear gauge / premium backdrop"},
             {"name": "FII cash", "value": f"₹{flows.get('fii', {}).get('net', 0)} Cr", "impact": "bull" if flows.get("fii", {}).get("net", 0) > 0 else "bear", "note": "Daily institutional cash"},
-            {"name": "7D index band", "value": f"{f7['min']} – {f7['max']}", "impact": "neutral", "note": "Expected range from realized vol"},
         ],
         "scenarios": [
-            {"label": "Base", "bias": direction, "prob": f7["probability"], "path": f"Toward {f7.get('target', spot)}", "action": "Prefer defined-risk structures; use listed stops"},
-            {"label": "Alternate", "bias": "Down" if direction == "Up" else "Up", "prob": 100 - f7["probability"], "path": "Fade if OI wall / pivot breaks", "action": "Stand aside / hedge — educational only"},
+            {"label": "Base (1h)", "bias": hour_dir, "prob": int(hour.get("probability") or 55), "path": f"Favor {opt_bias} structures while entry zone is live", "action": "Use locked entry / SL / targets — do not chase if LTP leaves the zone"},
+            {"label": "Invalidate", "bias": "Sideways" if hour_dir != "Sideways" else "Stand aside", "prob": 100 - int(hour.get("probability") or 55), "path": "Spot removed when premium exits entry zone or 1h window expires", "action": "Stand aside — educational only"},
         ],
         "flows": flows,
         "asOf": datetime.now().strftime("%d %b %Y · %H:%M IST"),

@@ -51,7 +51,7 @@
       const r = s.rating3yDetail || {};
       const f = s.forecast7d || {};
       TP.detail[s.symbol] = {
-        thesis: `7-day model leans ${f.direction} at ${f.probability}% with band ₹${f.min} – ₹${f.max}. EMA score ${f.emaScore ?? "—"}/10.`,
+        thesis: `7-day model leans ${f.direction} at ${f.probability}% with session-by-session bands. EMA score ${f.emaScore ?? "—"}/10.`,
         factors: [
           { name: "5D momentum", value: "from live scan", impact: "neutral", note: "Open stock detail for full drivers" },
           { name: "Volume intensity", value: `${Number(s.volumeZ || 0).toFixed(1)}σ`, impact: s.volumeZ >= 1 ? "bull" : "neutral" },

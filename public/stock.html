@@ -78,6 +78,18 @@
       const news = detail.news || [];
       const seriesDates = detail.seriesDates || stock.seriesDates || [];
       const bo = detail.breakoutStatus || { state: stock.breakout, note: stock.breakoutNote };
+      const daily = f7.daily || [];
+      const dailyRows = daily.map((d) => `
+        <tr>
+          <td>${d.date}</td>
+          <td>₹${TP.helpers.fmtNum(d.currentPrice != null ? d.currentPrice : nsePx)}</td>
+          <td>₹${TP.helpers.fmtNum(d.min)}</td>
+          <td>₹${TP.helpers.fmtNum(d.max)}</td>
+          <td>${TP.helpers.dirBadge(d.trend)}</td>
+          <td><strong>${d.probability}%</strong></td>
+          <td class="daily-comment">${d.comment || ""}</td>
+        </tr>
+      `).join("");
 
       document.title = `${stock.symbol} — TradeProof`;
 
@@ -94,7 +106,7 @@
 
         <div class="edu-banner">${payloadDisclaimer}</div>
 
-        <div class="grid-4" style="margin-bottom:1rem">
+        <div class="grid-3" style="margin-bottom:1rem">
           <article class="panel">
             <div class="panel-title">NSE · <span id="nseMode">quote</span></div>
             <div class="stat-value" style="font-size:1.5rem" id="nsePrice">₹${TP.helpers.fmtNum(nsePx)}</div>
@@ -113,12 +125,32 @@
             <div class="prob"><em>${f7.probability}%</em> <span style="font-size:0.8rem;color:var(--text-muted);font-weight:500">probability</span></div>
             <div class="stat-label" style="margin-top:0.45rem">EMA score <strong>${f7.emaScore != null ? f7.emaScore : "—"}</strong>/10</div>
           </article>
-          <article class="panel">
-            <div class="panel-title">7D band</div>
-            <div class="stat-value" style="font-size:1.15rem;line-height:1.35">₹${TP.helpers.fmtNum(f7.min)} – ₹${TP.helpers.fmtNum(f7.max)}</div>
-            <div class="stat-label">Target ≈ ₹${TP.helpers.fmtNum(f7.target)}</div>
-          </article>
         </div>
+
+        <section class="panel" style="margin-bottom:1rem">
+          <div class="panel-title">Next 7 trading days · expected low / high &amp; trend</div>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem">
+            Current price ₹${TP.helpers.fmtNum(nsePx)}. Each row is one forward session with model low, high, trend, probability, and reason.
+          </p>
+          ${daily.length ? `
+            <div class="table-wrap daily-forecast-wrap">
+              <table class="daily-forecast-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Current</th>
+                    <th>Min</th>
+                    <th>Max</th>
+                    <th>Trend</th>
+                    <th>Prob</th>
+                    <th>Comment</th>
+                  </tr>
+                </thead>
+                <tbody>${dailyRows}</tbody>
+              </table>
+            </div>
+          ` : `<p style="color:var(--text-muted)">Daily session bands unavailable for this name right now.</p>`}
+        </section>
 
         <div class="grid-2" style="margin-bottom:1rem">
           <section class="panel">
@@ -198,9 +230,9 @@
           </div>
         </section>
 
+        ${news.length ? `
         <section class="panel" style="margin-top:1rem">
-          <div class="panel-title">Business news</div>
-          ${news.length ? `
+          <div class="panel-title">Business news · last 7 days</div>
             <div class="news-list">
               ${news.map((n) => `
                 <article class="news-item">
@@ -209,8 +241,8 @@
                 </article>
               `).join("")}
             </div>
-          ` : `<p style="color:var(--text-muted)">No recent company headlines from the news feed right now.</p>`}
         </section>
+        ` : ``}
 
         <section class="panel" style="margin-top:1rem">
           <div class="panel-title">Sudden rise / fall — history reasons</div>
@@ -233,7 +265,7 @@
         </section>
 
         <section class="panel" style="margin-top:1rem">
-          <div class="panel-title">Related deals today</div>
+          <div class="panel-title">Related deals · last 7 days</div>
           ${deals.length ? `
             <div class="deal-list">
               ${deals.map((d) => `
@@ -250,7 +282,7 @@
                 </article>
               `).join("")}
             </div>
-          ` : `<p style="color:var(--text-muted)">No block/bulk deals for this name in the latest session.</p>`}
+          ` : `<p style="color:var(--text-muted)">No block/bulk deals for this name in the last 7 days.</p>`}
         </section>
       `;
 

@@ -90,6 +90,32 @@ def fetch_history(symbol: str, period: str = "6mo", exchange: str = "NSE") -> pd
     return cache.get_or_set(f"hist:{exchange}:{symbol}:{period}", 600, _load)
 
 
+def fetch_index_intraday_15m(ticker: str = "^NSEI", bars: int = 48) -> pd.DataFrame:
+    """
+    Nifty (or index) 15-minute OHLCV for short-horizon option spots.
+    Yahoo allows ~60 days of 15m history; we keep a short window for the 1h model.
+    """
+
+    def _load() -> pd.DataFrame:
+        try:
+            df = yf.Ticker(ticker).history(period="5d", interval="15m", auto_adjust=True)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("15m history %s failed: %s", ticker, exc)
+            return pd.DataFrame()
+        if df is None or df.empty:
+            return pd.DataFrame()
+        df = df.rename(columns=str.title)
+        if "Close" in df.columns:
+            df = df.dropna(subset=["Close"])
+        if "Volume" in df.columns:
+            df["Volume"] = df["Volume"].fillna(0)
+        if bars and len(df) > bars:
+            df = df.iloc[-bars:]
+        return df
+
+    return cache.get_or_set(f"intraday15m:{ticker}:{bars}", 90, _load)
+
+
 def fetch_dual_last(symbol: str) -> dict[str, Any]:
     """Latest NSE (.NS) and BSE (.BO) last prices."""
 
@@ -134,36 +160,99 @@ def fetch_dual_last(symbol: str) -> dict[str, Any]:
     return cache.get_or_set(f"dual:{symbol}:v2", 180, _load)
 
 
-def fetch_news(symbol: str, limit: int = 6) -> list[dict[str, Any]]:
+def _parse_news_ts(raw: Any) -> datetime | None:
+    """Normalize Yahoo / provider timestamps to naive UTC datetime."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, (int, float)):
+        try:
+            ts = float(raw)
+            if ts > 1_000_000_000_000:
+                ts /= 1000.0
+            return datetime.utcfromtimestamp(ts)
+        except Exception:  # noqa: BLE001
+            return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    # Numeric string (unix)
+    try:
+        if s.isdigit() or (s.replace(".", "", 1).isdigit() and s.count(".") <= 1):
+            return _parse_news_ts(float(s))
+    except Exception:  # noqa: BLE001
+        pass
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%d %b %Y",
+        "%b %d, %Y",
+    ):
+        try:
+            cleaned = s.replace("Z", "+0000") if "%z" in fmt else s.rstrip("Z")
+            if "%z" in fmt and cleaned.endswith("+00:00"):
+                cleaned = cleaned[:-6] + "+0000"
+            dt = datetime.strptime(cleaned[:26] if "T" in cleaned else cleaned[:19], fmt.replace("%z", ""))
+            return dt.replace(tzinfo=None)
+        except ValueError:
+            continue
+    try:
+        # fromisoformat fallback
+        iso = s.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(iso)
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fetch_news(symbol: str, limit: int = 12, days: int = 7) -> list[dict[str, Any]]:
+    """
+    Company headlines from the last `days` days only, newest first.
+    Returns [] when nothing falls inside the window (UI stays blank).
+    """
+
     def _load() -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
+        cutoff = datetime.utcnow() - timedelta(days=days)
         try:
             t = yf.Ticker(_yf_symbol(symbol, "NSE"))
             raw = t.news or []
-            for n in raw[:limit]:
-                # yfinance news shape varies by version
+            for n in raw:
                 content = n.get("content") if isinstance(n.get("content"), dict) else None
                 title = n.get("title") or (content or {}).get("title")
                 link = n.get("link") or (content or {}).get("clickThroughUrl", {})
                 if isinstance(link, dict):
                     link = link.get("url")
                 publisher = n.get("publisher") or (content or {}).get("provider", {}).get("displayName")
-                ts = n.get("providerPublishTime") or n.get("pubDate")
+                ts_raw = (
+                    n.get("providerPublishTime")
+                    or n.get("pubDate")
+                    or (content or {}).get("pubDate")
+                    or (content or {}).get("displayTime")
+                )
+                published_dt = _parse_news_ts(ts_raw)
                 if not title:
+                    continue
+                # Drop undated or older-than-window items
+                if published_dt is None or published_dt < cutoff:
                     continue
                 items.append(
                     {
                         "title": title,
                         "publisher": publisher or "News",
                         "link": link or "",
-                        "published": str(ts)[:19] if ts else "",
+                        "published": published_dt.strftime("%d %b %Y %H:%M"),
+                        "publishedTs": published_dt.timestamp(),
                     }
                 )
         except Exception as exc:  # noqa: BLE001
             log.warning("news %s failed: %s", symbol, exc)
-        return items
+        items.sort(key=lambda x: x.get("publishedTs") or 0, reverse=True)
+        return items[:limit]
 
-    return cache.get_or_set(f"news:{symbol}", 900, _load)
+    return cache.get_or_set(f"news:{symbol}:d{days}:v2", 900, _load)
 
 
 def fetch_index_news(limit: int = 5) -> list[dict[str, Any]]:
@@ -367,6 +456,68 @@ def _pack_deal(
     }
 
 
+def _parse_deal_date(raw: Any) -> datetime | None:
+    """Best-effort parse of deal date strings from NSE / Mr. Chartist."""
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, datetime):
+        return raw.replace(tzinfo=None)
+    if isinstance(raw, (int, float)):
+        try:
+            ts = float(raw)
+            if ts > 1_000_000_000_000:
+                ts /= 1000.0
+            if ts > 1_000_000_000:
+                return datetime.utcfromtimestamp(ts)
+        except Exception:  # noqa: BLE001
+            return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    for fmt in (
+        "%d-%b-%Y",
+        "%d-%b-%y",
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%Y-%m-%d %H:%M:%S",
+        "%d %b %Y",
+        "%d-%b-%Y %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+    ):
+        try:
+            slice_s = s[:19] if (len(s) > 10 and (" " in s or "T" in s)) else s[:11].strip()
+            return datetime.strptime(slice_s, fmt)
+        except ValueError:
+            try:
+                return datetime.strptime(s[:16], fmt)
+            except ValueError:
+                continue
+    # Digits-only YYYYMMDD
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) >= 8:
+        try:
+            return datetime.strptime(digits[:8], "%Y%m%d")
+        except ValueError:
+            pass
+    return None
+
+
+def _filter_deals_last_days(deals: list[dict[str, Any]], days: int = 7) -> list[dict[str, Any]]:
+    """Keep only deals dated within the last `days` calendar days (inclusive of today)."""
+    cutoff = (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    kept: list[dict[str, Any]] = []
+    for d in deals:
+        dt = _parse_deal_date(d.get("time"))
+        if dt is None:
+            # Undated prints from a 1W source are kept (already windowed by NSE period=1W)
+            kept.append(d)
+            continue
+        if dt >= cutoff:
+            kept.append(d)
+    return kept
+
+
 def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
     def _nselib_deals() -> list[dict[str, Any]]:
         deals: list[dict[str, Any]] = []
@@ -475,9 +626,10 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
                 continue
             seen.add(key)
             uniq.append(d)
-        return uniq
+        # Hard cap: last 7 calendar days only (never show older prints)
+        return _filter_deals_last_days(uniq, days=7)
 
-    return cache.get_or_set(f"deals:{period}:v2", 300, _nselib_deals)
+    return cache.get_or_set(f"deals:{period}:v3", 300, _nselib_deals)
 
 
 def fetch_option_volume_proxy(symbol: str = "NIFTY") -> dict[str, Any]:

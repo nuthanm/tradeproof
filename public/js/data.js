@@ -69,6 +69,15 @@ TP.helpers = {
     return `<span class="badge ${map[trend] || "badge-neutral"}"><span class="dot"></span>${trend || "Neutral"}</span>`;
   },
   dirBadge(dir) {
+    if (dir === "Sideways" || dir === "sideways") {
+      return `<span class="badge badge-neutral">◆ Sideways</span>`;
+    }
+    if (dir === "Uptrend") {
+      return `<span class="badge badge-bull">▲ Uptrend</span>`;
+    }
+    if (dir === "Downtrend") {
+      return `<span class="badge badge-bear">▼ Downtrend</span>`;
+    }
     const cls = dir === "Up" ? "badge-bull" : "badge-bear";
     return `<span class="badge ${cls}">${dir === "Up" ? "▲ Up" : "▼ Down"}</span>`;
   },

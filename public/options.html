@@ -64,15 +64,27 @@
             <span class="badge ${s.side === "CE" ? "badge-bull" : "badge-bear"}">${s.side}</span>
           </div>
           <div class="spot-grid">
-            <div><span class="stat-label">Ideal entry (LTP)</span><strong>₹${TP.helpers.fmtNum(s.entry)}</strong></div>
+            <div><span class="stat-label">Locked entry</span><strong>₹${TP.helpers.fmtNum(s.entry)}</strong></div>
             <div><span class="stat-label">Strict stop-loss</span><strong class="down">₹${TP.helpers.fmtNum(s.stopLoss)}</strong></div>
             <div><span class="stat-label">Target 1</span><strong class="up">₹${TP.helpers.fmtNum(s.target1)}</strong></div>
             <div><span class="stat-label">Target 2</span><strong class="up">₹${TP.helpers.fmtNum(s.target2)}</strong></div>
           </div>
-          <div class="spot-meta">Expiry ${s.expiry || "—"} · R:R ${s.riskReward || "—"} · Index invalidation ${s.indexInvalidation != null ? s.indexInvalidation.toLocaleString("en-IN") : "—"} · OI ${Number(s.oi||0).toLocaleString("en-IN")} · Vol ${Number(s.volume||0).toLocaleString("en-IN")}</div>
+          <div class="spot-meta">
+            Live LTP ₹${TP.helpers.fmtNum(s.currentLtp != null ? s.currentLtp : s.entry)}
+            · Entry zone ≤ ₹${TP.helpers.fmtNum(s.entryCeil != null ? s.entryCeil : s.entry)}
+            · ${s.validFor || "1h locked"}
+            · ${s.hourDirection || ""} · Expiry ${s.expiry || "—"}
+            · R:R ${s.riskReward || "—"}
+            · Index invalidation ${s.indexInvalidation != null ? s.indexInvalidation.toLocaleString("en-IN") : "—"}
+            · OI ${Number(s.oi||0).toLocaleString("en-IN")} · Vol ${Number(s.volume||0).toLocaleString("en-IN")}
+          </div>
           <p class="spot-why">${s.why}</p>
         </article>
-      `).join("") || `<p style="color:var(--text-muted)">No liquid spots ranked for this expiry yet (chain thin or unavailable).</p>`;
+      `).join("") || `<p style="color:var(--text-muted)">No reachable spots for this 1h window (entry zone missed, stop hit, or chain thin).</p>`;
+
+      const hour = o.hourForecast || weekly.hourForecast || {};
+      const lockMeta = weekly.lockMeta || {};
+      const hourDrivers = (hour.drivers || []).map((d) => `<li>${d}</li>`).join("");
 
       const heroBlock = hero.active ? `
         <section class="panel hero-zero-panel" style="margin-top:1rem">
@@ -107,7 +119,7 @@
         <div class="page-header">
           <div class="eyebrow">NSE Nifty · current weekly expiry</div>
           <h1>Nifty 50 options desk</h1>
-          <p>Weekly-expiry spots from live option-chain OI, volume, PCR, max pain, and breakout/trend bias — with strict premium stops and targets.</p>
+          <p>1-hour direction from the last 15 × 15m candles, then liquid weekly strikes with locked entry / SL / targets — spots drop when premium leaves the entry zone.</p>
         </div>
 
         <div class="edu-banner">${disclaimer}</div>
@@ -124,14 +136,14 @@
             <div class="stat-label">${cm.isExpiryDay ? "Expiry day · Hero Zero unlocked" : "Current expiry week"}</div>
           </article>
           <article class="panel">
-            <div class="panel-title">Signal</div>
+            <div class="panel-title">1h direction (15m)</div>
             <div class="stat-value" style="font-size:1.2rem;line-height:1.25">${o.signal}</div>
             <div style="margin-top:0.5rem">${TP.helpers.dirBadge(o.direction)} ${o.breakout ? TP.helpers.breakoutBadge(o.breakout) : ""}</div>
           </article>
           <article class="panel">
-            <div class="panel-title">Model probability</div>
+            <div class="panel-title">1h model probability</div>
             <div class="stat-value" style="font-size:1.8rem">${o.probability}%</div>
-            <div class="stat-label">${o.horizon || ""}</div>
+            <div class="stat-label">${o.horizon || hour.horizon || ""}</div>
           </article>
         </div>
 
@@ -153,7 +165,14 @@
         </div>
 
         <section class="panel" style="margin-bottom:1rem">
-          <div class="panel-title">Weekly expiry spots · strict SL &amp; targets</div>
+          <div class="panel-title">15m → 1h model</div>
+          <p style="font-size:0.88rem;margin-bottom:0.5rem">${hour.method || weekly.method || ""}</p>
+          ${hourDrivers ? `<ul class="method-list" style="margin-bottom:0.75rem">${hourDrivers}</ul>` : ""}
+          <div class="spot-meta">Lock window ${lockMeta.lockedAt || "—"} → ${lockMeta.validUntil || "—"} · ${lockMeta.policy || "Entry/SL/targets fixed for ~1 hour"}</div>
+        </section>
+
+        <section class="panel" style="margin-bottom:1rem">
+          <div class="panel-title">1h option spots · locked entry &amp; exits</div>
           <p style="font-size:0.88rem;color:var(--text-muted);margin-bottom:0.5rem">${weekly.biasNote || ""}</p>
           <p style="font-size:0.85rem;margin-bottom:1rem">${weekly.method || ""}</p>
           <div class="spot-list">${spotCards}</div>
