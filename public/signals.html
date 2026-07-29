@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <title>Breakout Signals — TradeProof</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
-<body>
+<body data-page="signals">
   <div class="bg-mesh" aria-hidden="true"></div>
   <div class="bg-grid" aria-hidden="true"></div>
 
@@ -29,52 +30,56 @@
     </div>
   </header>
 
-  <main class="page container">
-    <div class="page-header">
-      <div class="eyebrow">Nifty 50 · India Top 100</div>
-      <h1>Breakout & 7-day forecasts</h1>
-      <p>Trend / breakout scan using 50 &amp; 200 EMA plus support/resistance. Prob % is the directional chance; EMA score (1–10) is conviction behind that Prob %.</p>
-      <div id="liveBanner" class="meta-bar" style="margin-top:0.75rem;margin-bottom:0">Connecting…</div>
+  <main class="signals-main">
+    <div class="signals-top container">
+      <div class="page-header" style="margin-bottom:0.75rem">
+        <div class="eyebrow">Nifty 50 · India Top 100</div>
+        <h1>Breakout & 7-day forecasts</h1>
+        <p>Trend / breakout scan using 50 &amp; 200 EMA plus support/resistance. Prob % is the directional chance; EMA score (1–10) is conviction behind that Prob %.</p>
+        <div id="liveBanner" class="meta-bar" style="margin-top:0.5rem;margin-bottom:0">Connecting…</div>
+      </div>
+
+      <div class="toolbar rise" style="margin-bottom:0">
+        <input type="search" id="search" placeholder="Search symbol or name…" />
+        <select id="universeFilter">
+          <option value="all">All universes</option>
+          <option value="Nifty 50">Nifty 50</option>
+          <option value="Top 100">India Top 100</option>
+        </select>
+        <select id="breakoutFilter">
+          <option value="all">All breakout states</option>
+          <option value="confirmed">Confirmed breakout</option>
+          <option value="forming">Forming</option>
+          <option value="none">No breakout</option>
+        </select>
+        <select id="dirFilter">
+          <option value="all">7D Up & Down</option>
+          <option value="Up">7D Up</option>
+          <option value="Down">7D Down</option>
+        </select>
+        <span id="resultCount" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto"></span>
+      </div>
     </div>
 
-    <div class="toolbar rise">
-      <input type="search" id="search" placeholder="Search symbol or name…" />
-      <select id="universeFilter">
-        <option value="all">All universes</option>
-        <option value="Nifty 50">Nifty 50</option>
-        <option value="Top 100">India Top 100</option>
-      </select>
-      <select id="breakoutFilter">
-        <option value="all">All breakout states</option>
-        <option value="confirmed">Confirmed breakout</option>
-        <option value="forming">Forming</option>
-        <option value="none">No breakout</option>
-      </select>
-      <select id="dirFilter">
-        <option value="all">7D Up & Down</option>
-        <option value="Up">7D Up</option>
-        <option value="Down">7D Down</option>
-      </select>
-      <span id="resultCount" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto"></span>
-    </div>
-
-    <div class="table-wrap rise">
-      <table>
-        <thead>
-          <tr>
-            <th>Symbol</th>
-            <th>NSE · BSE</th>
-            <th>Breakout</th>
-            <th>7D forecast</th>
-            <th>Prob %</th>
-            <th>50/200 EMA score</th>
-            <th>Expected range</th>
-            <th>Call / Put · NSE|BSE</th>
-            <th>3Y rating</th>
-          </tr>
-        </thead>
-        <tbody id="signalsBody"></tbody>
-      </table>
+    <div class="signals-grid-area container">
+      <div class="table-wrap rise signals-table-wrap">
+        <table class="signals-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>NSE · BSE</th>
+              <th>Breakout</th>
+              <th>7D forecast</th>
+              <th>Prob %</th>
+              <th>EMA score</th>
+              <th>Expected range</th>
+              <th>Call / Put</th>
+              <th>3Y</th>
+            </tr>
+          </thead>
+          <tbody id="signalsBody"></tbody>
+        </table>
+      </div>
     </div>
   </main>
 

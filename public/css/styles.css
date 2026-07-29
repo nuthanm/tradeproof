@@ -1319,3 +1319,120 @@ body.tp-loading .tp-loader {
   margin-bottom: 0.25rem;
 }
 
+/* ── Signals page: fixed viewport height, no page scroll ── */
+body[data-page="signals"] {
+  overflow: hidden;
+  height: 100vh;
+}
+
+.signals-main {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-h));
+  overflow: hidden;
+}
+
+.signals-top {
+  flex-shrink: 0;
+  padding-top: 1.25rem;
+  padding-bottom: 0.75rem;
+}
+
+.signals-grid-area {
+  flex: 1 1 0;
+  min-height: 0;
+  padding-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.signals-table-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Fit the signals table into the available width */
+.signals-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.signals-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-soft);
+}
+
+/* Column width distribution */
+.signals-table th:nth-child(1),
+.signals-table td:nth-child(1) { width: 14%; }  /* Symbol */
+.signals-table th:nth-child(2),
+.signals-table td:nth-child(2) { width: 11%; }  /* NSE·BSE */
+.signals-table th:nth-child(3),
+.signals-table td:nth-child(3) { width: 11%; }  /* Breakout */
+.signals-table th:nth-child(4),
+.signals-table td:nth-child(4) { width: 7%;  }  /* 7D */
+.signals-table th:nth-child(5),
+.signals-table td:nth-child(5) { width: 13%; }  /* Prob % */
+.signals-table th:nth-child(6),
+.signals-table td:nth-child(6) { width: 15%; }  /* EMA score */
+.signals-table th:nth-child(7),
+.signals-table td:nth-child(7) { width: 10%; }  /* Range */
+.signals-table th:nth-child(8),
+.signals-table td:nth-child(8) { width: 12%; }  /* Call/Put */
+.signals-table th:nth-child(9),
+.signals-table td:nth-child(9) { width: 7%;  }  /* 3Y */
+
+/* Allow cells to wrap text so no horizontal overflow */
+.signals-table td,
+.signals-table th {
+  white-space: normal;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+/* Keep symbol & exchange tags readable */
+.signals-table .symbol {
+  font-size: 0.85rem;
+}
+.signals-table .symbol small {
+  font-size: 0.7rem;
+}
+
+/* Compact padding in signals table */
+.signals-table th,
+.signals-table td {
+  padding: 0.65rem 0.7rem;
+}
+
+/* Speed bar needs a min-width to stay usable */
+.signals-table .speed-bar-mini {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  [data-page="signals"] {
+    overflow: auto;
+  }
+  .signals-main {
+    height: auto;
+    overflow: visible;
+  }
+  .signals-table-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    max-height: none;
+  }
+  .signals-table {
+    table-layout: auto;
+    min-width: 860px;
+  }
+  .signals-table td,
+  .signals-table th {
+    white-space: nowrap;
+  }
+}

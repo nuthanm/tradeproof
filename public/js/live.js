@@ -195,10 +195,11 @@
 
   async function refreshHeavyOnce() {
     try {
-      const [pulseRes, dealsRes] = await Promise.all([
-        fetch("/api/pulse", { cache: "no-store" }),
-        fetch("/api/deals", { cache: "no-store" }),
-      ]);
+      const pagePath = location.pathname.split("/").pop() || "index.html";
+      const needsDeals = ["deals.html", "dashboard.html"].includes(pagePath);
+      const tasks = [fetch("/api/pulse", { cache: "no-store" })];
+      if (needsDeals) tasks.push(fetch("/api/deals", { cache: "no-store" }));
+      const [pulseRes, dealsRes] = await Promise.all(tasks);
       if (pulseRes.ok) {
         const pulse = await pulseRes.json();
         TP.indices = pulse.indices;
@@ -207,7 +208,7 @@
         TP.meta = Object.assign({}, TP.meta || {}, pulse.meta || {}, { asOf: pulse.asOf });
         document.dispatchEvent(new Event("tp:pulse"));
       }
-      if (dealsRes.ok) {
+      if (dealsRes && dealsRes.ok) {
         const d = await dealsRes.json();
         TP.deals = d.deals || [];
         document.dispatchEvent(new Event("tp:deals"));
@@ -239,24 +240,32 @@
       document.dispatchEvent(new Event("tp:pulse"));
       showLoader("Loading equities, deals & options…");
 
-      const [sigRes, dealsRes, optRes, pennyRes] = await Promise.all([
-        fetch("/api/signals?limit=30", { cache: "no-store" }),
-        fetch("/api/deals", { cache: "no-store" }),
-        fetch("/api/options/nifty", { cache: "no-store" }),
-        fetch("/api/pennies", { cache: "no-store" }),
-      ]);
+      // Determine which APIs this page needs to avoid unnecessary slow fetches
+      const pagePath = location.pathname.split("/").pop() || "index.html";
+      const needsSignals  = ["signals.html", "index.html", "dashboard.html", "stock.html"].includes(pagePath);
+      const needsDeals    = ["deals.html", "dashboard.html"].includes(pagePath);
+      const needsOptions  = ["options.html"].includes(pagePath);
+      const needsPennies  = ["penny.html"].includes(pagePath);
 
-      if (sigRes.ok) {
+      const fetches = await Promise.all([
+        needsSignals ? fetch("/api/signals?limit=30", { cache: "no-store" }) : Promise.resolve(null),
+        needsDeals   ? fetch("/api/deals",            { cache: "no-store" }) : Promise.resolve(null),
+        needsOptions ? fetch("/api/options/nifty",    { cache: "no-store" }) : Promise.resolve(null),
+        needsPennies ? fetch("/api/pennies",          { cache: "no-store" }) : Promise.resolve(null),
+      ]);
+      const [sigRes, dealsRes, optRes, pennyRes] = fetches;
+
+      if (sigRes && sigRes.ok) {
         const sig = await sigRes.json();
         TP.stocks = sig.stocks || [];
         if (sig.asOf) TP.meta.asOf = sig.asOf;
       }
-      if (dealsRes.ok) {
+      if (dealsRes && dealsRes.ok) {
         const d = await dealsRes.json();
         TP.deals = d.deals || [];
       }
-      if (optRes.ok) TP.optionsReversal = await optRes.json();
-      if (pennyRes.ok) {
+      if (optRes && optRes.ok) TP.optionsReversal = await optRes.json();
+      if (pennyRes && pennyRes.ok) {
         const p = await pennyRes.json();
         TP.pennies = (p.pennies || []).map((x) => ({ ...x, include: true }));
       }
