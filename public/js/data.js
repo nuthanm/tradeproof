@@ -62,7 +62,55 @@ TP.helpers = {
     f.min = Math.round(p * (1 - downside) * 100) / 100;
     f.max = Math.round(p * (1 + upside) * 100) / 100;
     f.target = Math.round((up ? p * (1 + upside * 0.65) : p * (1 - downside * 0.65)) * 100) / 100;
+    if (!Array.isArray(f.daily) || !f.daily.length) {
+      f.daily = TP.helpers.buildDailyForecast(p, f);
+    }
     return stock;
+  },
+  /** Client-side next-7-trading-day bands when API daily rows are missing */
+  buildDailyForecast(price, f7) {
+    const p = Number(price);
+    if (!Number.isFinite(p) || p <= 0) return [];
+    const baseDir = (f7 && f7.direction) || "Up";
+    const baseProb = Number((f7 && f7.probability) || 55);
+    const rows = [];
+    const d = new Date();
+    let dayI = 0;
+    let guard = 0;
+    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    while (rows.length < 7 && guard < 20) {
+      guard += 1;
+      d.setDate(d.getDate() + 1);
+      if (d.getDay() === 0 || d.getDay() === 6) continue;
+      dayI += 1;
+      const decay = 1 - (dayI - 1) * 0.07;
+      const move = 0.012 * Math.sqrt(dayI);
+      const upBias = baseDir === "Up";
+      let trend = "Sideways";
+      if (Math.abs(baseProb - 50) * decay > 6) trend = upBias ? "Up" : "Down";
+      const prob = Math.max(48, Math.min(92, Math.round(baseProb - (dayI - 1) * 2.2)));
+      const upM = move * (trend === "Down" ? 0.55 : 1.1);
+      const dnM = move * (trend === "Up" ? 0.55 : 1.1);
+      const mid = p * (1 + (upBias ? 1 : -1) * move * 0.35 * (dayI / 7));
+      const min = Math.round(mid * (1 - dnM) * 100) / 100;
+      const max = Math.round(mid * (1 + upM) * 100) / 100;
+      const date = `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      rows.push({
+        day: dayI,
+        date,
+        currentPrice: Math.round(p * 100) / 100,
+        min: Math.min(min, max),
+        max: Math.max(min, max),
+        trend,
+        probability: prob,
+        probabilityLabel: `${String(trend).toLowerCase()} — ${prob}%`,
+        comment: dayI === 1
+          ? `Near-term lean ${trend} from 7D model (${baseDir} ${baseProb}%)`
+          : `Session ${dayI}: band widens with √day; conviction fades from day-1 bias`,
+      });
+    }
+    return rows;
   },
   badge(trend) {
     const map = { Bullish: "badge-bull", Bearish: "badge-bear", Neutral: "badge-neutral" };

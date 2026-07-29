@@ -605,13 +605,14 @@ def forecast_7d_daily(
         rows.append(
             {
                 "day": day_i,
-                "date": cursor.strftime("%d %b %Y"),
+                "date": cursor.strftime("%a %d %B %Y"),
                 "dateIso": cursor.isoformat(),
                 "currentPrice": round(last, 2),
                 "min": dmin,
                 "max": dmax,
                 "trend": trend,
                 "probability": prob,
+                "probabilityLabel": f"{trend.lower()} — {prob}%",
                 "comment": " · ".join(bits),
             }
         )
@@ -1146,6 +1147,7 @@ def build_stock_row(symbol: str, df: pd.DataFrame, info: dict[str, Any], flows: 
             "emaScoreDetail": f7.get("emaScoreDetail"),
             "probMethod": f7.get("probMethod"),
             "levels": f7.get("levels"),
+            "daily": f7.get("daily") or [],
         },
         "pe": round(pe, 1) if pe else None,
         "pb": round(pb, 2) if pb else None,

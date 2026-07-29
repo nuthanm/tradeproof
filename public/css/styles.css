@@ -620,22 +620,34 @@ img {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9rem;
+  background: #fff;
 }
 
 .daily-forecast-table th,
 .daily-forecast-table td {
-  padding: 0.65rem 0.75rem;
+  padding: 0.55rem 0.7rem;
   text-align: left;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
+  border: 1px solid #222;
+  vertical-align: middle;
 }
 
 .daily-forecast-table thead th {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+  background: #fafafa;
+}
+
+.daily-forecast-table td:nth-child(2),
+.daily-forecast-table td:nth-child(3),
+.daily-forecast-table td:nth-child(4),
+.daily-forecast-table td:nth-child(5),
+.daily-forecast-table th:nth-child(2),
+.daily-forecast-table th:nth-child(3),
+.daily-forecast-table th:nth-child(4),
+.daily-forecast-table th:nth-child(5) {
+  text-align: center;
+  white-space: nowrap;
 }
 
 .daily-forecast-table .daily-comment {
