@@ -1,0 +1,15 @@
+---
+description: Always commit and push completed work to GitHub
+alwaysApply: true
+---
+
+# Always commit to GitHub
+
+When finishing a task that changes files in this repo:
+
+1. **Commit** the relevant changes (do not wait to be asked).
+2. **Push** to `origin` on the current branch immediately after a successful commit.
+3. Follow the existing commit message style (concise, why-focused).
+4. Do **not** commit secrets (`.env`, credentials, tokens).
+5. Do **not** use `--force` push, amend pushed commits, or skip hooks unless the user explicitly asks.
+6. After push, briefly report the commit hash and GitHub URL.
