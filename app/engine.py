@@ -1442,16 +1442,45 @@ def yf_index_history() -> pd.DataFrame:
     return cache.get_or_set("hist:^NSEI:6mo", 600, _load)
 
 
-def scan_pennies() -> list[dict[str, Any]]:
-    rows = []
+def scan_pennies(price_cap: float = 25.0) -> list[dict[str, Any]]:
+    """
+    Screen candidate names for a live price under `price_cap` (default ₹25).
+    If fewer than 5 clear under the cap, soft-fill with the cheapest names up to ₹40
+    so the desk is never blank when Yahoo data is thin.
+    """
+    soft_cap = max(price_cap, 40.0)
     histories = fetchers.batch_histories(PENNY_CANDIDATES, period="1y")
+    pool: list[dict[str, Any]] = []
+
     for sym in PENNY_CANDIDATES:
         df = histories.get(sym)
         if df is None or df.empty:
+            try:
+                df = fetchers.fetch_history(sym, period="6mo")
+            except Exception:  # noqa: BLE001
+                df = pd.DataFrame()
+
+        last = None
+        if df is not None and not df.empty and "Close" in df.columns:
+            try:
+                last = float(df["Close"].dropna().iloc[-1])
+            except Exception:  # noqa: BLE001
+                last = None
+        if last is None or not np.isfinite(last) or last <= 0:
+            try:
+                dual = fetchers.fetch_dual_last(sym)
+                last = _safe_float((dual.get("nse") or {}).get("price"))
+            except Exception:  # noqa: BLE001
+                last = None
+        if last is None or not np.isfinite(last) or last <= 0:
+            try:
+                info0 = fetchers.fetch_quote_info(sym)
+                last = _safe_float(info0.get("currentPrice"))
+            except Exception:  # noqa: BLE001
+                last = None
+        if last is None or not np.isfinite(last) or last <= 0 or last > soft_cap:
             continue
-        last = float(df["Close"].iloc[-1])
-        if last >= 25:
-            continue
+
         info = fetchers.fetch_quote_info(sym)
         pe = _safe_float(info.get("pe"))
         pb = _safe_float(info.get("pb"))
@@ -1461,8 +1490,8 @@ def scan_pennies() -> list[dict[str, Any]]:
             de_v = float(de) / 100 if de and float(de) > 10 else float(de) if de is not None else None
         except Exception:  # noqa: BLE001
             de_v = None
-        rating = rating_3y(df)
-        # suggestion heuristic
+
+        rating = rating_3y(df) if df is not None and not df.empty else 5.0
         if rating >= 6 and (pb or 99) < 1.5 and (roe or 0) > 8:
             suggestion = "Buy (tactical)"
             rr = "1:2.5"
@@ -1472,12 +1501,20 @@ def scan_pennies() -> list[dict[str, Any]]:
         else:
             suggestion = "Avoid"
             rr = "1:1.0"
-        change = float(df["Close"].iloc[-1] / df["Close"].iloc[-2] - 1) * 100 if len(df) > 1 else 0
-        rows.append(
+
+        change = 0.0
+        if df is not None and not df.empty and len(df) > 1:
+            try:
+                change = float(df["Close"].iloc[-1] / df["Close"].iloc[-2] - 1) * 100
+            except Exception:  # noqa: BLE001
+                change = 0.0
+
+        under_hard = last < price_cap
+        pool.append(
             {
                 "symbol": sym,
                 "name": info.get("longName") or sym,
-                "price": round(last, 2),
+                "price": round(float(last), 2),
                 "change": round(change, 2),
                 "sector": info.get("sector") or "n/a",
                 "pe": round(pe, 1) if pe else None,
@@ -1490,12 +1527,26 @@ def scan_pennies() -> list[dict[str, Any]]:
                 "riskReward": rr,
                 "suggestion": suggestion,
                 "horizon": "6–12M",
-                "thesis": f"Live screen under ₹25. 3Y composite rating {rating}/10 based on return/drawdown/vol.",
+                "thesis": (
+                    f"Live screen {'under' if under_hard else 'near'} ₹{price_cap:.0f} "
+                    f"(₹{last:.2f}). 3Y composite rating {rating}/10 based on return/drawdown/vol."
+                ),
                 "risks": "Penny liquidity, dilution, and news gaps — size small.",
                 "reward": "Tactical upside if fundamentals stabilize and volume confirms.",
+                "include": True,
+                "underCap": under_hard,
             }
         )
-    rows.sort(key=lambda r: -r["rating"])
+
+    hard = [r for r in pool if r["underCap"]]
+    if len(hard) >= 5:
+        rows = hard
+    else:
+        # Soft-fill with cheapest near-penny names so the desk is never empty
+        pool.sort(key=lambda r: r["price"])
+        rows = pool[: max(8, len(hard))]
+
+    rows.sort(key=lambda r: (-r["rating"], r["price"]))
     return rows
 
 

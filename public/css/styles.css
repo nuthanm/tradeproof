@@ -820,7 +820,19 @@ img {
   color: var(--text);
   padding: 0.55rem 0.85rem;
   border-radius: var(--radius-sm);
-  min-width: 160px;
+  min-width: 140px;
+}
+
+.toolbar input[type="date"] {
+  min-width: 150px;
+  font-family: inherit;
+}
+
+.toolbar-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .toolbar input:focus,

@@ -167,8 +167,19 @@ def stock(symbol: str):
 
 
 @app.get("/api/deals")
-def deals():
-    return {"deals": cache.get_or_set("api:deals", 900, fetchers.fetch_deals)}
+def deals(
+    from_date: str | None = Query(None, alias="from", description="YYYY-MM-DD inclusive start"),
+    to_date: str | None = Query(None, alias="to", description="YYYY-MM-DD inclusive end"),
+):
+    raw = cache.get_or_set("api:deals:1M:v4", 900, lambda: fetchers.fetch_deals(period="1M"))
+    filtered = fetchers.filter_deals_by_range(raw, from_date=from_date, to_date=to_date)
+    return {
+        "deals": filtered,
+        "from": from_date,
+        "to": to_date,
+        "windowDays": 30,
+        "count": len(filtered),
+    }
 
 
 @app.get("/api/options/nifty")
@@ -178,7 +189,8 @@ def options_nifty():
 
 @app.get("/api/pennies")
 def pennies():
-    return cache.get_or_set("api:pennies", 900, lambda: {"pennies": engine.scan_pennies()})
+    # Bust stale empty caches after candidate/universe refresh
+    return cache.get_or_set("api:pennies:v2", 600, lambda: {"pennies": engine.scan_pennies()})
 
 
 @app.get("/api/bundle")

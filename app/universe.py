@@ -24,11 +24,39 @@ TOP_100_EXTRA = [
 
 ALL_EQUITIES = sorted(set(NIFTY_50 + TOP_100_EXTRA))
 
-# Penny screen candidates often trade near/below ₹25 — filtered by live price later
+# Penny screen candidates — refreshed for names that often trade near/below ₹25.
+# Live price filter is applied in scan_pennies(); keep this list broad.
 PENNY_CANDIDATES = [
-    "IDEA", "YESBANK", "JPPOWER", "RTNPOWER", "SOUTHBANK", "DISHTV", "ALOKTEXT",
-    "RPOWER", "SUZLON", "GMRINFRA", "PNB", "SAIL", "NATIONALUM", "HINDCOPPER",
-    "FCONSUMER", "RTNINDIA", "NETWORK18", "TV18BRDCST", "J&KBANK", "UCOBANK",
+    "IDEA",
+    "YESBANK",
+    "JPPOWER",
+    "RTNPOWER",
+    "SOUTHBANK",
+    "DISHTV",
+    "ALOKINDS",
+    "RPOWER",
+    "SUZLON",
+    "GTLINFRA",
+    "PCJEWELLER",
+    "JPASSOCIAT",
+    "SPICEJET",
+    "EASEMYTRIP",
+    "SEPC",
+    "RTNINDIA",
+    "NETWORK18",
+    "TV18BRDCST",
+    "UCOBANK",
+    "CENTRALBK",
+    "IOB",
+    "IDBI",
+    "PNB",
+    "SAIL",
+    "NATIONALUM",
+    "HINDCOPPER",
+    "J&KBANK",
+    "HFCL",
+    "TTML",
+    "MTNL",
 ]
 
 INDEX_YF = {

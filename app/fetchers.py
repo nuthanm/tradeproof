@@ -442,8 +442,10 @@ def _pack_deal(
     if value_n <= 0 and qty_n > 0 and price_n > 0:
         value_n = (qty_n * price_n) / 1e7  # ₹ Cr
     qty_disp = f"{int(qty_n):,}" if qty_n >= 1 else (str(qty) if qty not in (None, "") else "0")
+    dt = _parse_deal_date(time)
     return {
         "time": (time or "")[:16],
+        "date": dt.strftime("%Y-%m-%d") if dt else "",
         "type": kind.title() if kind else "Block",
         "symbol": symbol,
         "side": _normalize_deal_side(side),
@@ -508,17 +510,54 @@ def _filter_deals_last_days(deals: list[dict[str, Any]], days: int = 7) -> list[
     cutoff = (datetime.now() - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
     kept: list[dict[str, Any]] = []
     for d in deals:
-        dt = _parse_deal_date(d.get("time"))
+        dt = _parse_deal_date(d.get("date") or d.get("time"))
         if dt is None:
-            # Undated prints from a 1W source are kept (already windowed by NSE period=1W)
+            # Undated prints from a period-scoped source are kept
             kept.append(d)
             continue
         if dt >= cutoff:
+            if not d.get("date"):
+                d = {**d, "date": dt.strftime("%Y-%m-%d")}
             kept.append(d)
     return kept
 
 
-def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
+def filter_deals_by_range(
+    deals: list[dict[str, Any]],
+    from_date: str | None = None,
+    to_date: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filter deals by inclusive YYYY-MM-DD range (client/API date picker)."""
+    start = _parse_deal_date(from_date) if from_date else None
+    end = _parse_deal_date(to_date) if to_date else None
+    if start:
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    if end:
+        end = end.replace(hour=23, minute=59, second=59, microsecond=0)
+    if not start and not end:
+        return deals
+    out: list[dict[str, Any]] = []
+    for d in deals:
+        dt = _parse_deal_date(d.get("date") or d.get("time"))
+        if dt is None:
+            # Keep undated when no strict from bound, else drop if from is set
+            if start is None:
+                out.append(d)
+            continue
+        if start and dt < start:
+            continue
+        if end and dt > end:
+            continue
+        out.append(d)
+    return out
+
+
+def fetch_deals(period: str = "1M") -> list[dict[str, Any]]:
+    """
+    Block/bulk deals for the deals desk.
+    Default period is 1M so the UI date-range picker has room (capped at ~30 days).
+    """
+
     def _nselib_deals() -> list[dict[str, Any]]:
         deals: list[dict[str, Any]] = []
         try:
@@ -536,7 +575,7 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
                     continue
                 if not isinstance(df, pd.DataFrame):
                     continue
-                for _, row in df.head(120).iterrows():
+                for _, row in df.head(400).iterrows():
                     symbol = _row_pick(row, "Symbol", "symbol", "SECURITY", "BD_SYMBOL", "Script Name", "Security Name")
                     qty = _row_pick(
                         row,
@@ -588,16 +627,14 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
                     items = [x for x in payload if isinstance(x, dict)]
                 elif isinstance(payload, dict):
                     as_on = str(payload.get("as_on") or payload.get("date") or "")
-                    # API shape: { as_on, bulk: [...], block: [...], short: [...] }
                     for kind_key, kind_label in (("block", "Block"), ("bulk", "Bulk")):
                         for item in payload.get(kind_key) or []:
                             if isinstance(item, dict):
                                 items.append({**item, "_kind": kind_label})
-                    # legacy keys
                     for item in payload.get("deals") or payload.get("data") or []:
                         if isinstance(item, dict):
                             items.append(item)
-                for item in items[:200]:
+                for item in items[:400]:
                     qty = item.get("qty") or item.get("quantity") or item.get("Qty")
                     price = item.get("price") or item.get("Price") or item.get("avgPrice")
                     value = item.get("value") or item.get("valueCr") or item.get("value_cr")
@@ -617,7 +654,6 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
         except Exception as exc:  # noqa: BLE001
             log.warning("large-deals feed failed: %s", exc)
 
-        # Deduplicate identical prints
         seen: set[tuple] = set()
         uniq: list[dict[str, Any]] = []
         for d in deals:
@@ -626,10 +662,10 @@ def fetch_deals(period: str = "1W") -> list[dict[str, Any]]:
                 continue
             seen.add(key)
             uniq.append(d)
-        # Hard cap: last 7 calendar days only (never show older prints)
-        return _filter_deals_last_days(uniq, days=7)
+        # Cap storage window at 30 calendar days for the date picker
+        return _filter_deals_last_days(uniq, days=30)
 
-    return cache.get_or_set(f"deals:{period}:v3", 300, _nselib_deals)
+    return cache.get_or_set(f"deals:{period}:v4", 300, _nselib_deals)
 
 
 def fetch_option_volume_proxy(symbol: str = "NIFTY") -> dict[str, Any]:

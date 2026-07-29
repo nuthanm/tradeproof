@@ -34,7 +34,7 @@
     <div class="page-header">
       <div class="eyebrow">NSE block · bulk prints</div>
       <h1>Deals Desk</h1>
-      <p>Large institutional prints from the last 7 days only — older sessions are excluded.</p>
+      <p>Large institutional prints — pick a date range (up to the last 30 days of available feed data).</p>
     </div>
 
     <div class="toolbar rise">
@@ -47,6 +47,16 @@
         <option value="all">Buy & sell</option>
         <option value="Buy">Buy side</option>
         <option value="Sell">Sell side</option>
+      </select>
+      <label class="toolbar-label" for="fromDate">From</label>
+      <input type="date" id="fromDate" />
+      <label class="toolbar-label" for="toDate">To</label>
+      <input type="date" id="toDate" />
+      <select id="rangePreset">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="custom">Custom range</option>
       </select>
       <span id="dealCount" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto"></span>
     </div>
@@ -61,12 +71,63 @@
   <script src="js/live.js"></script>
   <script src="js/app.js"></script>
   <script>
+    function isoDate(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function setPresetDays(days) {
+      const to = new Date();
+      const from = new Date();
+      from.setDate(to.getDate() - (days - 1));
+      document.getElementById("toDate").value = isoDate(to);
+      document.getElementById("fromDate").value = isoDate(from);
+      const min = new Date();
+      min.setDate(to.getDate() - 29);
+      document.getElementById("fromDate").min = isoDate(min);
+      document.getElementById("toDate").min = isoDate(min);
+      document.getElementById("fromDate").max = isoDate(to);
+      document.getElementById("toDate").max = isoDate(to);
+    }
+
+    function dealDateKey(d) {
+      if (d.date && /^\d{4}-\d{2}-\d{2}/.test(d.date)) return d.date.slice(0, 10);
+      const raw = String(d.time || "");
+      const m = raw.match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) return m[1];
+      // dd-Mmm-YYYY / dd-Mmm-yy
+      const m2 = raw.match(/(\d{1,2})[- ]([A-Za-z]{3})[- ](\d{2,4})/);
+      if (m2) {
+        const months = { Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11 };
+        const mon = months[m2[2].slice(0, 3)];
+        if (mon != null) {
+          let y = parseInt(m2[3], 10);
+          if (y < 100) y += 2000;
+          return isoDate(new Date(y, mon, parseInt(m2[1], 10)));
+        }
+      }
+      return "";
+    }
+
     function render() {
       const type = document.getElementById("typeFilter").value;
       const side = document.getElementById("sideFilter").value;
-      let deals = [...TP.deals];
+      const from = document.getElementById("fromDate").value;
+      const to = document.getElementById("toDate").value;
+      let deals = [...(TP.deals || [])];
       if (type !== "all") deals = deals.filter((d) => d.type === type);
       if (side !== "all") deals = deals.filter((d) => d.side === side);
+      if (from || to) {
+        deals = deals.filter((d) => {
+          const key = dealDateKey(d);
+          if (!key) return !from; // undated kept only when from is empty
+          if (from && key < from) return false;
+          if (to && key > to) return false;
+          return true;
+        });
+      }
 
       const buyVal = deals.filter((d) => d.side === "Buy").reduce((a, d) => a + Number(d.value || 0), 0);
       const sellVal = deals.filter((d) => d.side === "Sell").reduce((a, d) => a + Number(d.value || 0), 0);
@@ -87,7 +148,7 @@
               ${TP.helpers.sideBadge(d.side)}
             </div>
             <div class="deal-meta">
-              <span>${d.time} IST</span>
+              <span>${d.time || d.date || ""} IST</span>
               <span>Qty ${(d.qty != null && d.qty !== "") ? d.qty : "—"}</span>
               <span>₹${Number(d.value || 0).toFixed(1)} Cr</span>
               <span>${d.client}</span>
@@ -98,12 +159,23 @@
             <a class="btn btn-ghost" style="padding:0.45rem 0.85rem;font-size:0.8rem" href="stock.html?symbol=${d.symbol}">Signal</a>
           </div>
         </article>
-      `).join("") || `<p style="color:var(--text-muted)">No deals match filters.</p>`;
+      `).join("") || `<p style="color:var(--text-muted)">No deals match filters for the selected dates.</p>`;
     }
 
     document.addEventListener("DOMContentLoaded", () => {
-      ["typeFilter", "sideFilter"].forEach((id) => {
-        document.getElementById(id).addEventListener("change", render);
+      setPresetDays(7);
+      document.getElementById("rangePreset").addEventListener("change", () => {
+        const v = document.getElementById("rangePreset").value;
+        if (v !== "custom") setPresetDays(Number(v));
+        render();
+      });
+      ["typeFilter", "sideFilter", "fromDate", "toDate"].forEach((id) => {
+        document.getElementById(id).addEventListener("change", () => {
+          if (id === "fromDate" || id === "toDate") {
+            document.getElementById("rangePreset").value = "custom";
+          }
+          render();
+        });
       });
       TPUI.whenReady(render);
       document.addEventListener("tp:deals", render);

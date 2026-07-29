@@ -268,6 +268,7 @@
       if (pennyRes && pennyRes.ok) {
         const p = await pennyRes.json();
         TP.pennies = (p.pennies || []).map((x) => ({ ...x, include: true }));
+        document.dispatchEvent(new Event("tp:pennies"));
       }
 
       applyDetailFromStocks();

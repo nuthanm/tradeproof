@@ -34,7 +34,7 @@
     <div class="page-header">
       <div class="eyebrow">Price &lt; ₹25 · high risk</div>
       <h1>Penny stock desk</h1>
-      <p>Fundamentals score (1–10), risk–reward, and tactical suggestion for a 6–12 month horizon. Speculative — size small.</p>
+      <p>Fundamentals score (1–10), risk–reward, and tactical suggestion for a 6–12 month horizon. Speculative — size small. Soft-fills near-penny names if fewer than five clear under ₹25.</p>
     </div>
 
     <div class="toolbar">
@@ -57,51 +57,62 @@
   <script>
     function render() {
       const filter = document.getElementById("suggestFilter").value;
-      let rows = TP.pennies.filter((p) => p.include !== false && p.price < 25);
-      if (filter === "Buy") rows = rows.filter((p) => p.suggestion.startsWith("Buy"));
+      const all = Array.isArray(TP.pennies) ? TP.pennies : [];
+      let rows = all.filter((p) => p && p.include !== false && Number(p.price) > 0 && Number(p.price) < 40);
+      // Prefer strict < ₹25 when available; otherwise show soft-fill set from API
+      const under25 = rows.filter((p) => Number(p.price) < 25);
+      if (under25.length >= 3) rows = under25;
+      if (filter === "Buy") rows = rows.filter((p) => String(p.suggestion || "").startsWith("Buy"));
       else if (filter !== "all") rows = rows.filter((p) => p.suggestion === filter);
-      rows.sort((a, b) => b.rating - a.rating);
+      rows.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
 
-      document.getElementById("count").textContent = `${rows.length} names · below ₹25`;
-      document.getElementById("pennyList").innerHTML = rows.map((p) => `
+      const underCount = rows.filter((p) => Number(p.price) < 25).length;
+      document.getElementById("count").textContent = underCount === rows.length
+        ? `${rows.length} names · below ₹25`
+        : `${rows.length} names · near-penny screen (soft fill)`;
+
+      document.getElementById("pennyList").innerHTML = rows.length ? rows.map((p) => `
         <article class="panel" style="padding:1.25rem">
           <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.75rem;align-items:flex-start">
             <div>
               <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
                 <strong style="font-size:1.15rem">${p.symbol}</strong>
                 ${TP.helpers.suggestBadge(p.suggestion)}
-                <span class="rating-pill">Rating ${p.rating.toFixed(1)} / 10</span>
+                <span class="rating-pill">Rating ${Number(p.rating || 0).toFixed(1)} / 10</span>
+                ${Number(p.price) >= 25 ? `<span class="badge badge-warn">Near ₹25</span>` : ""}
               </div>
-              <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.25rem">${p.name} · ${p.sector} · ₹${TP.helpers.fmtNum(p.price)}</div>
+              <div style="color:var(--text-muted);font-size:0.85rem;margin-top:0.25rem">${p.name || ""} · ${p.sector || "n/a"} · ₹${TP.helpers.fmtNum(p.price)}</div>
             </div>
             <div style="text-align:right">
               <div class="stat-label">Risk : Reward</div>
-              <div class="stat-value" style="font-size:1.4rem">${p.riskReward}</div>
-              <div class="stat-label">${p.horizon}</div>
+              <div class="stat-value" style="font-size:1.4rem">${p.riskReward || "—"}</div>
+              <div class="stat-label">${p.horizon || "6–12M"}</div>
             </div>
           </div>
 
           <div class="kpi-grid" style="margin:1rem 0">
             <div class="kpi-card"><div class="stat-label">P/E</div><strong>${p.pe ?? "n/a"}</strong><small>Loss-making if blank</small></div>
-            <div class="kpi-card"><div class="stat-label">P/B</div><strong>${p.pb}</strong><small>Book value check</small></div>
-            <div class="kpi-card"><div class="stat-label">ROE %</div><strong>${p.roe}</strong><small>Profitability</small></div>
+            <div class="kpi-card"><div class="stat-label">P/B</div><strong>${p.pb ?? "n/a"}</strong><small>Book value check</small></div>
+            <div class="kpi-card"><div class="stat-label">ROE %</div><strong>${p.roe ?? "n/a"}</strong><small>Profitability</small></div>
             <div class="kpi-card"><div class="stat-label">D/E</div><strong>${p.debtEquity ?? "n/a"}</strong><small>Leverage</small></div>
-            <div class="kpi-card"><div class="stat-label">Promoter %</div><strong>${p.promotor}</strong><small>Skin in the game</small></div>
-            <div class="kpi-card"><div class="stat-label">Sales growth 3Y %</div><strong>${p.salesGrowth3y}</strong><small>Top-line trend</small></div>
+            <div class="kpi-card"><div class="stat-label">Promoter %</div><strong>${p.promotor ?? "n/a"}</strong><small>Skin in the game</small></div>
+            <div class="kpi-card"><div class="stat-label">Sales growth 3Y %</div><strong>${p.salesGrowth3y ?? "n/a"}</strong><small>Top-line trend</small></div>
           </div>
 
-          <p style="margin-bottom:0.5rem">${p.thesis}</p>
+          <p style="margin-bottom:0.5rem">${p.thesis || ""}</p>
           <div class="grid-2">
-            <div style="font-size:0.88rem"><strong class="down">Risks</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.risks}</div></div>
-            <div style="font-size:0.88rem"><strong class="up">Reward path</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.reward}</div></div>
+            <div style="font-size:0.88rem"><strong class="down">Risks</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.risks || ""}</div></div>
+            <div style="font-size:0.88rem"><strong class="up">Reward path</strong><div style="color:var(--text-muted);margin-top:0.25rem">${p.reward || ""}</div></div>
           </div>
         </article>
-      `).join("");
+      `).join("") : `<p style="color:var(--text-muted)">No penny names cleared the live price screen right now. Try refreshing in a minute — Yahoo history can be delayed.</p>`;
     }
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("suggestFilter").addEventListener("change", render);
       TPUI.whenReady(render);
+      document.addEventListener("tp:ready", render);
+      document.addEventListener("tp:pennies", render);
     });
   </script>
 </body>
